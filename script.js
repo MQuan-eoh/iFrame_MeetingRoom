@@ -2439,7 +2439,7 @@ const eraWidget = new EraWidget();
 const temp = document.getElementById("temperature-eRa");
 const humi = document.getElementById("humidity-eRa");
 const currentIndex = document.getElementById("current-eRa");
-const powerIndex = document.getElementById("power-eRa");
+const voltageIndex = document.getElementById("voltage-eRa");
 
 const temp2 = document.getElementById("temperature-eRa2");
 const humi2 = document.getElementById("humidity-eRa2");
@@ -2458,7 +2458,7 @@ let currentACTemperature = 20; // Giá trị mặc định
 let configTemp = null,
   configHumi = null,
   configCurrent = null,
-  configPower = null,
+  configVoltage = null,
   configTemp2 = null,
   configHumi2 = null,
   configCurrent2 = null,
@@ -2483,20 +2483,20 @@ let configTemp = null,
 eraWidget.init({
   onConfiguration: (configuration) => {
     // Lưu các cấu hình khi nhận được từ widget
-    configTemp = configuration.realtime_configs[0]; // Lưu cấu hình nhiệt độ
-    configHumi = configuration.realtime_configs[1]; // Lưu cấu hình độ ẩm
-    configCurrent = configuration.realtime_configs[2]; // Lưu cấu hình power
-    configPower = configuration.realtime_configs[3]; // Lưu cấu hình toggle light
+    configTemp = configuration.realtime_configs[0];
+    configHumi = configuration.realtime_configs[1];
+    configCurrent = configuration.realtime_configs[2];
+    configVoltage = configuration.realtime_configs[3];
 
-    configTemp2 = configuration.realtime_configs[4]; // Lưu cấu hình nhiệt độ
-    configHumi2 = configuration.realtime_configs[5]; // Lưu cấu hình độ ẩm
-    configCurrent2 = configuration.realtime_configs[6]; // Lưu cấu hình power
-    configPower2 = configuration.realtime_configs[7]; // Lưu cấu hình toggle light
+    configTemp2 = configuration.realtime_configs[4];
+    configHumi2 = configuration.realtime_configs[5];
+    configCurrent2 = configuration.realtime_configs[6];
+    configPower2 = configuration.realtime_configs[7];
 
-    configTemp3 = configuration.realtime_configs[8]; // Lưu cấu hình nhiệt độ
-    configHumi3 = configuration.realtime_configs[9]; // Lưu cấu hình độ ẩm
-    configCurrent3 = configuration.realtime_configs[10]; // Lưu cấu hình power
-    configPower3 = configuration.realtime_configs[11]; // Lưu cấu hình toggle light
+    configTemp3 = configuration.realtime_configs[8];
+    configHumi3 = configuration.realtime_configs[9];
+    configCurrent3 = configuration.realtime_configs[10];
+    configPower3 = configuration.realtime_configs[11];
 
     configAirConditioner = configuration.realtime_configs[12];
     configAirConditioner2 = configuration.realtime_configs[13];
@@ -2521,7 +2521,7 @@ eraWidget.init({
       configTemp,
       configHumi,
       configCurrent,
-      configPower,
+      configVoltage,
 
       configTemp2,
       configHumi2,
@@ -2563,13 +2563,14 @@ eraWidget.init({
 
     if (configCurrent && values[configCurrent.id]) {
       const currentValue = values[configCurrent.id].value;
-      if (currentIndex) currentIndex.textContent = currentValue;
+      currentIndex.textContent = currentValue;
       updateRoomTemperatureDisplay("lotus", values[configCurrent.id].value);
     }
 
-    if (configPower && values[configPower.id]) {
-      const powerValue = values[configPower.id].value;
-      if (powerIndex) powerIndex.textContent = powerValue;
+    if (configVoltage && values[configVoltage.id]) {
+      const voltageValue = values[configVoltage.id].value;
+      if (voltageIndex) voltageIndex.textContent = voltageValue;
+      updateRoomTemperatureDisplay("lotus", values[configVoltage.id].value);
     }
 
     if (configTemp2 && values[configTemp2.id]) {

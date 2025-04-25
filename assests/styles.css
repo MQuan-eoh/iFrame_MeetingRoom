@@ -2596,7 +2596,9 @@ schedule-table {
     overflow: hidden;
     text-overflow: ellipsis;
   }
-
+  .currentLotus {
+    padding-right: 50px;
+  }
   .room-button {
     min-width: 110px;
     padding: 8px;
