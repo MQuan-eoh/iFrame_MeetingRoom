@@ -2588,7 +2588,12 @@ schedule-table {
     justify-content: flex-start;
     flex-wrap: wrap;
   }
-
+  .powerLavender1 {
+    margin-left: 60px;
+  }
+  .powerLavender2 {
+    margin-left: 63px;
+  }
   /* Thêm ellipsis cho text dài */
   .meeting-title,
   .stats-row > * {
