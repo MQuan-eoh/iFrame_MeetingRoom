@@ -619,14 +619,14 @@ async function handleFileUpload(file) {
     fileCache.data = mergedData;
     fileCache.lastModified = new Date().getTime();
 
-    localStorage.setItem(
-      "fileCache",
-      JSON.stringify({
-        data: fileCache.data,
-        lastModified: fileCache.lastModified,
-      })
-    );
-
+    // localStorage.setItem(
+    //   "fileCache",
+    //   JSON.stringify({
+    //     data: fileCache.data,
+    //     lastModified: fileCache.lastModified,
+    //   })
+    // );
+    await writeToFirebase(mergedData);
     updateProgress(90, "Đang thiết lập giám sát...");
     if (fileHandle) {
       if (window.fileCheckInterval) {
@@ -1442,9 +1442,15 @@ async function checkFileChanges() {
     }
 
     // Lấy dữ liệu từ cache
-    const existingCache = JSON.parse(localStorage.getItem("fileCache")) || {
-      data: [],
-    };
+    // const existingCache = JSON.parse(localStorage.getItem("fileCache")) || {
+    //   data: [],
+    // };
+
+    const today = new Date();
+    const dateStr = `${padZero(today.getDate())}/${padZero(
+      today.getMonth() + 1
+    )}/${today.getFullYear()}`;
+    const existingCache = { data: await readFromFirebase(dateStr) };
 
     // Lọc ra các cuộc họp đã kết thúc sớm
     const endedMeetings = existingCache.data.filter(
@@ -1551,24 +1557,18 @@ document.addEventListener("DOMContentLoaded", initClock);
 document.addEventListener("DOMContentLoaded", function () {
   const datePicker = document.getElementById("meetingDate");
   const today = new Date();
-  const formattedDate = today.toISOString().split("T")[0];
+  const formattedDate = today.tfoISOString().split("T")[0];
   datePicker.value = formattedDate;
   hideProgressBar();
 
-  datePicker.addEventListener("change", function () {
-    // Lấy dữ liệu từ localStorage
-    const cachedData = JSON.parse(localStorage.getItem("fileCache"));
+  datePicker.addEventListener("change", async function () {
+    const selectedDate = new Date(this.value);
+    const dateStr = `${padZero(selectedDate.getDate())}/${padZero(
+      selectedDate.getMonth() + 1
+    )}/${selectedDate.getFullYear()}`;
 
-    if (cachedData && cachedData.data) {
-      const selectedDate = new Date(this.value);
-      const filteredData = cachedData.data.filter((meeting) => {
-        const meetingDate = new Date(
-          meeting.date.split("/").reverse().join("-")
-        );
-        return meetingDate.toDateString() === selectedDate.toDateString();
-      });
-      updateScheduleTable(filteredData);
-    }
+    const filteredData = await readFromFirebase(dateStr);
+    updateScheduleTable(filteredData);
   });
 });
 
@@ -2300,6 +2300,61 @@ function isValidMeetingState(meeting, currentTime) {
   return isTimeValid;
 }
 
+async function readFromFirebase(dateStr) {
+  try {
+    const snapshot = await database.ref(dateStr).once("value");
+    if (!snapshot.exists()) return [];
+
+    const data = [];
+    snapshot.forEach((roomSnapshot) => {
+      roomSnapshot.forEach((meetingSnapshot) => {
+        data.push(meetingSnapshot.val());
+      });
+    });
+
+    return data;
+  } catch (error) {
+    console.error("Firebase read error:", error);
+    return [];
+  }
+}
+
+async function writeToFirebase(data) {
+  try {
+    const now = new Date();
+    const dateStr = `${padZero(now.getDate())}/${padZero(
+      now.getMonth() + 1
+    )}/${now.getFullYear()}`;
+
+    // Cấu trúc: ngày -> phòng -> dữ liệu
+    const updates = {};
+
+    data.forEach((meeting) => {
+      const roomKey = meeting.room.includes("Lotus")
+        ? "Lotus"
+        : meeting.room.includes("Lavender 1")
+        ? "Lavender1"
+        : "Lavender2";
+
+      const meetingKey = database
+        .ref()
+        .child(dateStr)
+        .child(roomKey)
+        .push().key;
+
+      updates[`${dateStr}/${roomKey}/${meetingKey}`] = {
+        ...meeting,
+        firebaseKey: meetingKey,
+      };
+    });
+
+    await database.ref().update(updates);
+    console.log("Firebase write successful");
+  } catch (error) {
+    console.error("Firebase write error:", error);
+  }
+}
+
 function handleEndMeeting(event) {
   // Hiển thị hộp thoại xác nhận
   const cachedData = JSON.parse(localStorage.getItem("fileCache"));
@@ -2347,14 +2402,14 @@ function handleEndMeeting(event) {
       fileCache.data = updatedData;
       fileCache.lastModified = new Date().getTime();
 
-      localStorage.setItem(
-        "fileCache",
-        JSON.stringify({
-          data: updatedData,
-          lastModified: fileCache.lastModified,
-        })
-      );
-
+      // localStorage.setItem(
+      //   "fileCache",
+      //   JSON.stringify({
+      //     data: updatedData,
+      //     lastModified: fileCache.lastModified,
+      //   })
+      // );
+      writeToFirebase(updatedData);
       // Lọc lại các cuộc họp trong ngày
       const todayMeetings = updatedData.filter((meeting) => {
         const meetingDate = new Date(
@@ -2459,6 +2514,7 @@ let configTemp = null,
   configHumi = null,
   configCurrent = null,
   configVoltage = null,
+  configPower = null,
   configTemp2 = null,
   configHumi2 = null,
   configCurrent2 = null,
@@ -2522,6 +2578,7 @@ eraWidget.init({
       configHumi,
       configCurrent,
       configVoltage,
+      configPower,
 
       configTemp2,
       configHumi2,
