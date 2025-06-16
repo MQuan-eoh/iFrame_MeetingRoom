@@ -604,16 +604,20 @@ async function handleFileUpload(file) {
       return meeting;
     });
 
+    // Lọc chỉ các meeting hôm nay
     const today = new Date();
     const filteredData = mergedData.filter((meeting) => {
       const meetingDate = new Date(meeting.date.split("/").reverse().join("-"));
       return meetingDate.toDateString() === today.toDateString();
     });
 
-    updateProgress(60, "Đang cập nhật bảng...");
-    updateScheduleTable(filteredData.length > 0 ? filteredData : mergedData);
-    updateRoomStatus(mergedData);
-    startAutoUpdate(mergedData);
+    // Cập nhật bảng chỉ với dữ liệu hôm nay
+    updateScheduleTable(filteredData);
+    updateRoomStatus(filteredData);
+    startAutoUpdate(filteredData);
+
+    // Chỉ ghi dữ liệu hôm nay lên Firebase
+    await writeToFirebase(filteredData);
 
     updateProgress(80, "Đang lưu cache...");
     fileCache.data = mergedData;
@@ -626,7 +630,6 @@ async function handleFileUpload(file) {
     //     lastModified: fileCache.lastModified,
     //   })
     // );
-    await writeToFirebase(mergedData);
     updateProgress(90, "Đang thiết lập giám sát...");
     if (fileHandle) {
       if (window.fileCheckInterval) {
@@ -1428,6 +1431,30 @@ let fileCache = {
   lastModified: null,
   reader: new FileReader(),
 };
+
+function logMeetingData(meetings, source) {
+  console.log(`Dữ liệu meeting từ ${source}:`);
+  meetings.forEach((meeting, index) => {
+    console.log(
+      `[${index + 1}] ${meeting.room} - ${meeting.content} (${
+        meeting.startTime
+      } - ${meeting.endTime})`
+    );
+  });
+}
+
+// Sử dụng trong các hàm:
+async function writeToFirebase(data) {
+  // ...
+  logMeetingData(todayMeetings, "Firebase write");
+  // ...
+}
+
+async function readFromFirebase(dateStr) {
+  // ...
+  logMeetingData(data, "Firebase read");
+  return data;
+}
 // Hàm kiểm tra thay đổi từ input element
 async function checkFileChanges() {
   if (!fileHandle) return;
@@ -1460,72 +1487,38 @@ async function checkFileChanges() {
     if (fileData !== lastFileData) {
       console.log("File đã thay đổi, đang cập nhật...");
       const newData = await processExcelFile(file);
-      showProgressBar();
-      updateProgress(0, "Đang đọc dữ liệu từ file...");
-      // Merge dữ liệu mới với trạng thái các cuộc họp đã kết thúc
-      const mergedData = newData.map((meeting) => {
-        updateProgress(30, "Đang phân tích dữ liệu...");
-        const endedMeeting = endedMeetings.find(
-          (ended) =>
-            ended.id === meeting.id &&
-            ended.room === meeting.room &&
-            ended.date === meeting.date
-        );
 
-        if (endedMeeting) {
-          // Giữ nguyên thông tin của cuộc họp đã kết thúc
-          return endedMeeting;
-        }
-        return meeting;
-      });
-      updateProgress(60, "Đang hợp nhất với dữ liệu hiện tại...");
-      // Lọc các cuộc họp trong ngày
+      // Lọc chỉ các meeting hôm nay
       const today = new Date();
-      const todayMeetings = mergedData.filter((meeting) => {
+      const todayMeetings = newData.filter((meeting) => {
         const meetingDate = new Date(
           meeting.date.split("/").reverse().join("-")
         );
         return meetingDate.toDateString() === today.toDateString();
       });
-      updateProgress(75, "Đang cập nhật lịch trình...");
-      // Cập nhật UI và cache
+
+      // Cập nhật UI
       updateScheduleTable(todayMeetings);
       updateRoomStatus(todayMeetings);
 
-      fileCache.data = mergedData;
-      fileCache.lastModified = new Date().getTime();
+      // Ghi lên Firebase
+      await writeToFirebase(todayMeetings);
 
-      localStorage.setItem(
-        "fileCache",
-        JSON.stringify({
-          data: mergedData,
-          lastModified: fileCache.lastModified,
-        })
-      );
-      updateProgress(95, "Đang lưu bộ nhớ đệm...");
       lastFileData = fileData;
-      updateProgress(100, "Cập nhật thành công!");
-      setTimeout(hideProgressBar, 1000);
     } else {
-      // Khi file không thay đổi, sử dụng dữ liệu từ cache
+      // Khi file không thay đổi, đọc từ Firebase
       const today = new Date();
-      const todayMeetings = existingCache.data.filter((meeting) => {
-        const meetingDate = new Date(
-          meeting.date.split("/").reverse().join("-")
-        );
-        return meetingDate.toDateString() === today.toDateString();
-      });
+      const dateKey = `${padZero(today.getDate())}-${padZero(
+        today.getMonth() + 1
+      )}-${today.getFullYear()}`;
+      const todayMeetings = await readFromFirebase(dateKey);
 
-      console.log("Sử dụng dữ liệu từ cache:", todayMeetings);
-      // updateScheduleTable(todayMeetings);
+      console.log("Sử dụng dữ liệu từ Firebase:", todayMeetings);
+      updateScheduleTable(todayMeetings);
       updateRoomStatus(todayMeetings);
     }
   } catch (error) {
     console.error("Lỗi khi kiểm tra file:", error);
-    if (error.name === "NotAllowedError") {
-      clearInterval(window.fileCheckInterval);
-      fileHandle = null;
-    }
   }
 }
 const overlay = document.createElement("div");
@@ -2302,13 +2295,22 @@ function isValidMeetingState(meeting, currentTime) {
 
 async function readFromFirebase(dateStr) {
   try {
-    const snapshot = await database.ref(dateStr).once("value");
+    // Chuyển đổi YYYY-MM-DD -> DD-MM-YYYY
+    const [year, month, day] = dateStr.split("-");
+    const firebaseDateKey = `${day}-${month}-${year}`;
+
+    const snapshot = await database.ref(firebaseDateKey).once("value");
     if (!snapshot.exists()) return [];
 
     const data = [];
+
     snapshot.forEach((roomSnapshot) => {
+      const roomName = roomSnapshot.key;
       roomSnapshot.forEach((meetingSnapshot) => {
-        data.push(meetingSnapshot.val());
+        data.push({
+          ...meetingSnapshot.val(),
+          room: roomName, // Khôi phục tên phòng chính xác
+        });
       });
     });
 
@@ -2322,34 +2324,49 @@ async function readFromFirebase(dateStr) {
 async function writeToFirebase(data) {
   try {
     const now = new Date();
-    const dateStr = `${padZero(now.getDate())}/${padZero(
+    const dateKey = `${padZero(now.getDate())}-${padZero(
       now.getMonth() + 1
-    )}/${now.getFullYear()}`;
+    )}-${now.getFullYear()}`;
 
-    // Cấu trúc: ngày -> phòng -> dữ liệu
+    // Chuẩn hóa tên phòng chính xác hơn
+    const getRoomKey = (roomName) => {
+      const normalized = roomName.toLowerCase().trim();
+
+      if (normalized.includes("lotus")) return "Lotus";
+      if (normalized.includes("lavender 1") || normalized.includes("lavender1"))
+        return "Lavender1";
+      if (normalized.includes("lavender 2") || normalized.includes("lavender2"))
+        return "Lavender2";
+
+      console.warn(`Unknown room: ${roomName}. Using 'Other'`);
+      return "Other";
+    };
+
+    // Xóa dữ liệu cũ trước khi ghi mới
+    await database.ref(dateKey).remove();
+
     const updates = {};
 
-    data.forEach((meeting) => {
-      const roomKey = meeting.room.includes("Lotus")
-        ? "Lotus"
-        : meeting.room.includes("Lavender 1")
-        ? "Lavender1"
-        : "Lavender2";
+    // Chỉ ghi các meeting của ngày hiện tại
+    const today = new Date();
+    const todayMeetings = data.filter((meeting) => {
+      const meetingDate = new Date(meeting.date.split("/").reverse().join("-"));
+      return meetingDate.toDateString() === today.toDateString();
+    });
 
+    todayMeetings.forEach((meeting) => {
+      const roomKey = getRoomKey(meeting.room);
       const meetingKey = database
         .ref()
-        .child(dateStr)
+        .child(dateKey)
         .child(roomKey)
         .push().key;
 
-      updates[`${dateStr}/${roomKey}/${meetingKey}`] = {
-        ...meeting,
-        firebaseKey: meetingKey,
-      };
+      updates[`${dateKey}/${roomKey}/${meetingKey}`] = meeting;
     });
 
     await database.ref().update(updates);
-    console.log("Firebase write successful");
+    console.log("Firebase write successful. Meetings:", todayMeetings.length);
   } catch (error) {
     console.error("Firebase write error:", error);
   }
@@ -2409,18 +2426,17 @@ function handleEndMeeting(event) {
       //     lastModified: fileCache.lastModified,
       //   })
       // );
-      writeToFirebase(updatedData);
+
       // Lọc lại các cuộc họp trong ngày
+      const today = new Date();
       const todayMeetings = updatedData.filter((meeting) => {
         const meetingDate = new Date(
           meeting.date.split("/").reverse().join("-")
         );
-        const currentDateObj = new Date(
-          currentDate.split("/").reverse().join("-")
-        );
-        return meetingDate.toDateString() === currentDateObj.toDateString();
+        return meetingDate.toDateString() === today.toDateString();
       });
 
+      writeToFirebase(todayMeetings);
       // Cập nhật giao diện
       updateRoomStatus(updatedData);
       updateScheduleTable(todayMeetings);
