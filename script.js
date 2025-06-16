@@ -1443,18 +1443,6 @@ function logMeetingData(meetings, source) {
   });
 }
 
-// Sử dụng trong các hàm:
-async function writeToFirebase(data) {
-  // ...
-  logMeetingData(todayMeetings, "Firebase write");
-  // ...
-}
-
-async function readFromFirebase(dateStr) {
-  // ...
-  logMeetingData(data, "Firebase read");
-  return data;
-}
 // Hàm kiểm tra thay đổi từ input element
 async function checkFileChanges() {
   if (!fileHandle) return;
@@ -1896,37 +1884,6 @@ function renderRoomPage(data, roomKeyword, roomName) {
     "lavender-1": valueAir2,
     "lavender-2": valueAir3,
   };
-  const updateRoomStats = () => {
-    console.log(`Updating stats for ${roomKey}`);
-
-    // Lấy elements hiện tại
-    const currentElement = document.getElementById(`current-${eraSuffix}`);
-    const powerElement = document.getElementById(`power-${eraSuffix}`);
-
-    if (!currentElement || !powerElement) {
-      console.log("Elements not found, skipping update");
-      return;
-    }
-
-    // Lấy giá trị mới từ E-Ra platform
-    try {
-      // const values = eraWidget.getValues();
-      // console.log("New values from ERA:", values);
-      if (configCurrent && values[configCurrent.id]) {
-        const currentValue = values[configCurrent.id].value;
-        currentElement.textContent = currentValue.toFixed(1);
-        console.log(`Updated current: ${currentValue}A`);
-      }
-
-      if (configPower && values[configPower.id]) {
-        const powerValue = values[configPower.id].value;
-        powerElement.textContent = powerValue.toFixed(2);
-        console.log(`Updated power: ${powerValue}KW`);
-      }
-    } catch (error) {
-      console.error("Error updating room stats:", error);
-    }
-  };
 
   // Lấy thời gian hiện tại
   const currentTime = new Date();
@@ -2253,15 +2210,6 @@ async function loadDynamicPage(pageType) {
         mainContent.style.display = "flex";
       });
     }
-
-    // Cập nhật trạng thái AC
-    const roomKey = roomKeyword.toLowerCase();
-    if (acStates[roomKey]) {
-      const acCard = dynamicContent.querySelector(".ac-card");
-      if (acCard) {
-        updateACStatus(acCard, roomKey);
-      }
-    }
   } catch (error) {
     console.error("Error loading dynamic page:", error);
   }
@@ -2303,13 +2251,36 @@ function isValidMeetingState(meeting, currentTime) {
   return isTimeValid;
 }
 
-async function readFromFirebase(dateStr) {
-  try {
-    // Chuyển đổi YYYY-MM-DD -> DD-MM-YYYY
-    const [year, month, day] = dateStr.split("-");
-    const firebaseDateKey = `${day}-${month}-${year}`;
+// async function readFromFirebase(dateStr) {
+//   try {
+//     // Chuyển đổi YYYY-MM-DD -> DD-MM-YYYY
+//     const [year, month, day] = dateStr.split("-");
+//     const firebaseDateKey = `${day}-${month}-${year}`;
 
-    const snapshot = await database.ref(firebaseDateKey).once("value");
+//     const snapshot = await database.ref(firebaseDateKey).once("value");
+//     if (!snapshot.exists()) return [];
+
+//     const data = [];
+
+//     snapshot.forEach((roomSnapshot) => {
+//       const roomName = roomSnapshot.key;
+//       roomSnapshot.forEach((meetingSnapshot) => {
+//         data.push({
+//           ...meetingSnapshot.val(),
+//           room: roomName, // Khôi phục tên phòng chính xác
+//         });
+//       });
+//     });
+
+//     return data;
+//   } catch (error) {
+//     console.error("Firebase read error:", error);
+//     return [];
+//   }
+// }
+async function readFromFirebase(dateKey) {
+  try {
+    const snapshot = await database.ref(dateKey).once("value");
     if (!snapshot.exists()) return [];
 
     const data = [];
@@ -2633,7 +2604,22 @@ eraWidget.init({
 
     console.log("Received new values from ERA:", values);
     latestValues = values; // Store latest values
+    // Create a function to update room elements
+    const updateRoomElements = (roomKey, current, power) => {
+      const eraSuffix = roomEraMap[roomKey];
+      const currentElement = document.getElementById(`current-${eraSuffix}`);
+      const powerElement = document.getElementById(`power-${eraSuffix}`);
 
+      if (currentElement && current !== undefined) {
+        currentElement.textContent = current.toFixed(1);
+        console.log(`Updated ${roomKey} current: ${current}A`);
+      }
+
+      if (powerElement && power !== undefined) {
+        powerElement.textContent = power.toFixed(2);
+        console.log(`Updated ${roomKey} power: ${power}KW`);
+      }
+    };
     if (configTemp && values[configTemp.id]) {
       const tempValue = values[configTemp.id].value;
       if (temp) temp.textContent = tempValue;
@@ -2644,12 +2630,18 @@ eraWidget.init({
       if (humi) humi.textContent = humidValue;
     }
 
+    // if (configCurrent && values[configCurrent.id]) {
+    //   const currentValue = values[configCurrent.id].value;
+    //   currentIndex.textContent = currentValue;
+    //   updateRoomTemperatureDisplay("lotus", values[configCurrent.id].value);
+    // }
     if (configCurrent && values[configCurrent.id]) {
-      const currentValue = values[configCurrent.id].value;
-      currentIndex.textContent = currentValue;
-      updateRoomTemperatureDisplay("lotus", values[configCurrent.id].value);
+      updateRoomElements(
+        "lotus",
+        values[configCurrent.id].value,
+        values[configVoltage?.id]?.value
+      );
     }
-
     if (configVoltage && values[configVoltage.id]) {
       const voltageValue = values[configVoltage.id].value;
       if (voltageIndex) voltageIndex.textContent = voltageValue;
@@ -2666,12 +2658,20 @@ eraWidget.init({
       if (humi2) humi2.textContent = humidValue2;
     }
 
+    // if (configCurrent2 && values[configCurrent2.id]) {
+    //   const currentValue2 = values[configCurrent2.id].value;
+    //   if (currentIndex2) currentIndex2.textContent = currentValue2;
+    //   updateRoomTemperatureDisplay(
+    //     "lavender-1",
+    //     values[configCurrent2.id].value
+    //   );
+    // }
+    // Lavender 1 Room
     if (configCurrent2 && values[configCurrent2.id]) {
-      const currentValue2 = values[configCurrent2.id].value;
-      if (currentIndex2) currentIndex2.textContent = currentValue2;
-      updateRoomTemperatureDisplay(
+      updateRoomElements(
         "lavender-1",
-        values[configCurrent2.id].value
+        values[configCurrent2.id].value,
+        values[configPower2?.id]?.value
       );
     }
 
@@ -2690,12 +2690,20 @@ eraWidget.init({
       if (humi3) humi3.textContent = humidValue3;
     }
 
+    // if (configCurrent3 && values[configCurrent3.id]) {
+    //   const currentValue3 = values[configCurrent3.id].value;
+    //   if (currentIndex3) currentIndex3.textContent = currentValue3;
+    //   updateRoomTemperatureDisplay(
+    //     "lavender-2",
+    //     values[configCurrent3.id].value
+    //   );
+    // }
+    // Lavender 2 Room
     if (configCurrent3 && values[configCurrent3.id]) {
-      const currentValue3 = values[configCurrent3.id].value;
-      if (currentIndex3) currentIndex3.textContent = currentValue3;
-      updateRoomTemperatureDisplay(
+      updateRoomElements(
         "lavender-2",
-        values[configCurrent3.id].value
+        values[configCurrent3.id].value,
+        values[configPower3?.id]?.value
       );
     }
 
@@ -2704,13 +2712,17 @@ eraWidget.init({
       if (powerIndex3) powerIndex3.textContent = powerValue3;
     }
 
+    // if (configAirConditioner && values[configAirConditioner.id]) {
+    //   const airValue = values[configAirConditioner.id].value;
+    //   roomTemperatures.lotus = parseFloat(airValue);
+    //   updateRoomTemperatureDisplay("lotus", airValue);
+    //   console.log("Air Value (lotus):", airValue);
+    // }
     if (configAirConditioner && values[configAirConditioner.id]) {
       const airValue = values[configAirConditioner.id].value;
       roomTemperatures.lotus = parseFloat(airValue);
       updateRoomTemperatureDisplay("lotus", airValue);
-      console.log("Air Value (lotus):", airValue);
     }
-
     if (configAirConditioner2 && values[configAirConditioner2.id]) {
       const airValue2 = values[configAirConditioner2.id].value;
       roomTemperatures["lavender-1"] = parseFloat(airValue2);
