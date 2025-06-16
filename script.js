@@ -2175,7 +2175,7 @@ function renderRoomPage(data, roomKeyword, roomName) {
 }
 
 // Hàm chính để load trang động
-function loadDynamicPage(pageType) {
+async function loadDynamicPage(pageType) {
   console.log("Loading dynamic page for:", pageType);
 
   const dynamicContent = document.getElementById("dynamicPageContent");
@@ -2187,14 +2187,15 @@ function loadDynamicPage(pageType) {
   }
 
   try {
-    const cachedData = localStorage.getItem("fileCache");
-    if (!cachedData) {
-      console.error("No cached data found!");
-      return;
-    }
+    // Lấy ngày hiện tại dưới dạng key Firebase (DD-MM-YYYY)
+    const today = new Date();
+    const dateKey = `${padZero(today.getDate())}-${padZero(
+      today.getMonth() + 1
+    )}-${today.getFullYear()}`;
 
-    const data = JSON.parse(cachedData).data;
-    console.log("Loaded data from cache:", data);
+    // Đọc dữ liệu từ Firebase cho ngày hiện tại
+    const data = await readFromFirebase(dateKey);
+    console.log("Loaded data from Firebase:", data);
 
     let roomKeyword, roomName;
     switch (pageType) {
@@ -2251,6 +2252,15 @@ function loadDynamicPage(pageType) {
         dynamicContent.style.display = "none";
         mainContent.style.display = "flex";
       });
+    }
+
+    // Cập nhật trạng thái AC
+    const roomKey = roomKeyword.toLowerCase();
+    if (acStates[roomKey]) {
+      const acCard = dynamicContent.querySelector(".ac-card");
+      if (acCard) {
+        updateACStatus(acCard, roomKey);
+      }
     }
   } catch (error) {
     console.error("Error loading dynamic page:", error);
