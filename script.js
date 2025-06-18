@@ -2679,6 +2679,10 @@ eraWidget.init({
         "lotus",
         values[configPeopleDetection1.id].value
       );
+      console.log(
+        "Lotus have a people detection value:",
+        values[configPeopleDetection1.id].value
+      );
     }
 
     if (configPeopleDetection2 && values[configPeopleDetection2.id]) {
@@ -2986,14 +2990,22 @@ function findRoomSection(roomName) {
 }
 
 const PeopleDetectionSystem = {
+  // State management
   states: {
     lotus: { isEmpty: true },
     "lavender-1": { isEmpty: true },
     "lavender-2": { isEmpty: true },
   },
 
+  // Configuration mapping
+  config: {
+    lotus: { sensorId: 4 },
+    "lavender-1": { sensorId: 16 },
+    "lavender-2": { sensorId: 17 },
+  },
+
+  // Room name normalization
   normalizeRoomDisplay(roomKey) {
-    // Match the exact HTML structure
     const names = {
       lotus: "Lotus",
       "lavender-1": "Lavender 1",
@@ -3001,6 +3013,23 @@ const PeopleDetectionSystem = {
     };
     return names[roomKey] || roomKey;
   },
+
+  // System initialization
+  initialize() {
+    console.log("Initializing People Detection System...");
+    this.validateRoomStructure();
+
+    Object.keys(this.states).forEach((roomKey) => {
+      console.log(
+        `Initializing state for ${this.normalizeRoomDisplay(roomKey)}`
+      );
+      this.updateUI(roomKey, this.states[roomKey].isEmpty);
+    });
+
+    console.log("People Detection System initialized");
+  },
+
+  // Structure validation
   validateRoomStructure() {
     Object.keys(this.states).forEach((roomKey) => {
       const room = this.normalizeRoomDisplay(roomKey);
@@ -3011,67 +3040,86 @@ const PeopleDetectionSystem = {
         return;
       }
 
-      const indicators = {
-        peopleIndicator: section.querySelector(".people-indicator"),
-        dot: section.querySelector(".people-dot"),
-        statusText: section.querySelector(".people-status-text"),
-      };
-
-      const missingElements = Object.entries(indicators)
-        .filter(([_, element]) => !element)
-        .map(([name]) => name);
-
-      if (missingElements.length > 0) {
-        console.error(`Missing elements for ${room}:`, missingElements);
-      }
+      this.validateRoomElements(section, room);
     });
   },
-  initialize() {
-    Object.keys(this.states).forEach((roomKey) => {
-      const room = this.normalizeRoomDisplay(roomKey);
-      console.log(`Initializing state for ${room}`);
-      this.updateUI(roomKey, this.states[roomKey].isEmpty);
-    });
-    console.log("People Detection System initialized");
+
+  // Element validation
+  validateRoomElements(section, room) {
+    const required = {
+      peopleIndicator: ".people-indicator",
+      dot: ".people-dot",
+      statusText: ".people-status-text",
+    };
+
+    const missing = Object.entries(required)
+      .filter(([_, selector]) => !section.querySelector(selector))
+      .map(([name]) => name);
+
+    if (missing.length > 0) {
+      console.error(`Missing elements for ${room}:`, missing);
+    }
+  },
+
+  updateStatus(roomKey, value) {
+    console.log(`People detection update for ${roomKey}: ${value}`);
+    // Convert sensor value to room status (0 = occupied, 1 = empty)
+    const isEmpty = value === 1;
+
+    if (this.states[roomKey]?.isEmpty !== isEmpty) {
+      this.states[roomKey].isEmpty = isEmpty;
+      this.updateUI(roomKey, isEmpty);
+    }
   },
 
   updateUI(roomKey, isEmpty) {
     const room = this.normalizeRoomDisplay(roomKey);
-    const roomSection = findRoomSection(room);
+    const section = findRoomSection(room);
 
-    if (!roomSection) {
+    if (!section) {
       console.warn(`Room section not found: ${room}`);
       return;
     }
 
-    const peopleIndicator = roomSection.querySelector(".people-indicator");
+    // Get all required elements
+    const peopleIndicator = section.querySelector(".people-indicator");
     if (!peopleIndicator) {
       console.warn(`People indicator not found for ${room}`);
       return;
     }
 
+    // Directly target the status text element
+    const statusText = peopleIndicator.querySelector(".people-status-text");
     const dot = peopleIndicator.querySelector(".people-dot");
-    const text = peopleIndicator.querySelector(".people-status-text");
 
-    if (dot && text) {
+    if (statusText && dot) {
+      // Update status text using textContent
+      statusText.textContent = isEmpty ? "Phòng trống" : "Có người";
+
+      // Update dot color
       dot.style.backgroundColor = isEmpty ? "#ff0000" : "#4CAF50";
-      text.textContent = isEmpty ? "Phòng trống" : "Có người";
 
       // Add animation
+      dot.classList.remove("status-update");
+      void dot.offsetWidth; // Force reflow
       dot.classList.add("status-update");
-      setTimeout(() => dot.classList.remove("status-update"), 500);
 
-      console.log(`Updated ${room} status: ${isEmpty ? "Empty" : "Occupied"}`);
+      console.log(`Updated ${room} status text to: ${statusText.textContent}`);
+    } else {
+      console.error(`Missing elements for ${room}:`, {
+        hasStatusText: !!statusText,
+        hasDot: !!dot,
+      });
     }
   },
+  // Visual indicator update
+  updateIndicators(dot, text, isEmpty) {
+    dot.style.backgroundColor = isEmpty ? "#ff0000" : "#4CAF50";
+    text.textContent = isEmpty ? "Phòng trống" : "Có người";
 
-  normalizeRoomDisplay(roomKey) {
-    // Map room keys to display names
-    const names = {
-      lotus: "Phòng Lotus",
-      "lavender-1": "Phòng Lavender 1",
-      "lavender-2": "Phòng Lavender 2",
-    };
-    return names[roomKey] || roomKey;
+    // Add animation
+    dot.classList.remove("status-update");
+    void dot.offsetWidth; // Trigger reflow
+    dot.classList.add("status-update");
   },
 };
