@@ -2245,18 +2245,19 @@ function setupEndMeetingHandlers() {
   dynamicContent._endMeetingHandler = newHandler;
   dynamicContent.addEventListener("click", newHandler);
 }
-// Thêm hàm kiểm tra trạng thái kết thúc của cuộc họp
 function isValidMeetingState(meeting, currentTime) {
-  if (!meeting) return false;
+  if (!meeting || !currentTime) return false;
 
-  // Nếu cuộc họp đã được đánh dấu kết thúc, luôn trả về false
-  if (meeting.isEnded) return false;
+  // Check if meeting is already ended
+  if (meeting.isEnded || meeting.forceEndedByUser) return false;
 
-  // Kiểm tra thời gian hiện tại có nằm trong khoảng thời gian họp hay không
-  const isTimeValid =
-    currentTime >= meeting.startTime && currentTime <= meeting.endTime;
+  // Parse times to compare
+  const current = timeToMinutes(currentTime);
+  const start = timeToMinutes(meeting.startTime);
+  const end = timeToMinutes(meeting.endTime);
 
-  return isTimeValid;
+  // Check if current time is within meeting time range
+  return current >= start && current <= end;
 }
 
 async function readFromFirebase(dateKey) {
@@ -2334,80 +2335,88 @@ async function writeToFirebase(data) {
   }
 }
 
-function handleEndMeeting(event) {
-  // Hiển thị hộp thoại xác nhận
-  const cachedData = JSON.parse(localStorage.getItem("fileCache"));
-  if (!cachedData || !cachedData.data) {
-    console.error("No meeting data found!");
+async function handleEndMeeting(event) {
+  const isConfirmed = confirm(
+    "Bạn có chắc chắn muốn kết thúc cuộc họp này không?"
+  );
+  if (!isConfirmed) {
+    console.log("End meeting cancelled");
     return;
   }
 
-  const data = cachedData.data;
-  const currentTime = getCurrentTime();
-  const currentDate = getCurrentDate();
-  const roomName = event.target
-    .closest(".main-panel")
-    .querySelector("h1").textContent;
+  try {
+    // Get current meeting info
+    const currentTime = getCurrentTime();
+    const currentDate = getCurrentDate();
+    const mainPanel = event.target.closest(".main-panel");
+    const roomName = mainPanel.querySelector("h1").textContent;
 
-  // Tìm cuộc họp hiện tại
-  const roomMeetings = data.filter(
-    (meeting) =>
-      meeting.room.toLowerCase().replace(/\s+/g, "-") &&
-      meeting.date === currentDate
-  );
+    // Get today's meetings from Firebase
+    const dateKey = `${currentDate.split("/").join("-")}`;
+    const meetings = await readFromFirebase(dateKey);
 
-  const currentMeeting = roomMeetings.find((meeting) =>
-    isValidMeetingState(meeting, currentTime)
-  );
+    if (!meetings || meetings.length === 0) {
+      console.error("No meetings found for today");
+      return;
+    }
 
-  if (currentMeeting) {
-    const updatedData = [...data];
-    const currentMeetingIndex = updatedData.findIndex(
-      (meeting) => meeting.id === currentMeeting.id
+    // Find current active meeting
+    const currentMeeting = meetings.find(
+      (meeting) =>
+        meeting.room.toLowerCase().includes(roomName.toLowerCase()) &&
+        isValidMeetingState(meeting, currentTime) &&
+        !meeting.isEnded
     );
 
-    if (currentMeetingIndex !== -1) {
-      // Cập nhật thông tin cuộc họp với flag đặc biệt
-      updatedData[currentMeetingIndex] = {
-        ...currentMeeting,
-        endTime: currentTime,
-        isEnded: true,
-        lastUpdated: new Date().getTime(),
-        originalEndTime: currentMeeting.endTime,
-        forceEndedByUser: true, // Thêm flag mới để đánh dấu cuộc họp đã được kết thúc bởi người dùng
-      };
-
-      // Cập nhật cache và localStorage
-      fileCache.data = updatedData;
-      fileCache.lastModified = new Date().getTime();
-
-      // Lọc lại các cuộc họp trong ngày
-      const today = new Date();
-      const todayMeetings = updatedData.filter((meeting) => {
-        const meetingDate = new Date(
-          meeting.date.split("/").reverse().join("-")
-        );
-        return meetingDate.toDateString() === today.toDateString();
-      });
-
-      writeToFirebase(todayMeetings);
-      // Cập nhật giao diện
-      updateRoomStatus(updatedData);
-      updateScheduleTable(todayMeetings);
-      renderRoomPage(
-        updatedData,
-        roomName.toLowerCase().replace(/\s+/g, "-"),
-        roomName.toLowerCase().replace(/\s+/g, "-")
-      );
-
-      console.log(`Meeting ended early:`, {
-        room: roomName,
-        originalEndTime: currentMeeting.endTime,
-        actualEndTime: currentTime,
-        isEnded: true,
-        forceEndedByUser: true,
-      });
+    if (!currentMeeting) {
+      console.error("No active meeting found");
+      return;
     }
+
+    // Update meeting status
+    const updatedMeeting = {
+      ...currentMeeting,
+      endTime: currentTime,
+      isEnded: true,
+      lastUpdated: new Date().getTime(),
+      originalEndTime: currentMeeting.endTime,
+      forceEndedByUser: true,
+    };
+
+    // Update meetings array
+    const updatedMeetings = meetings.map((meeting) =>
+      meeting.id === currentMeeting.id ? updatedMeeting : meeting
+    );
+
+    // Update Firebase
+    await writeToFirebase(updatedMeetings);
+
+    // Update local cache
+    fileCache.data = updatedMeetings;
+    fileCache.lastModified = new Date().getTime();
+
+    // Update UI
+    updateScheduleTable(updatedMeetings);
+    updateRoomStatus(updatedMeetings);
+
+    // Reload room page if needed
+    const dynamicContent = document.getElementById("dynamicPageContent");
+    if (dynamicContent.style.display === "block") {
+      renderRoomPage(
+        updatedMeetings,
+        roomName.toLowerCase().replace(/\s+/g, "-"),
+        roomName
+      );
+    }
+
+    console.log("Meeting ended successfully:", {
+      room: roomName,
+      originalEndTime: currentMeeting.endTime,
+      actualEndTime: currentTime,
+    });
+  } catch (error) {
+    console.error("Error ending meeting:", error);
+    alert("Có lỗi xảy ra khi kết thúc cuộc họp. Vui lòng thử lại.");
   }
 }
 
@@ -3097,7 +3106,7 @@ const PeopleDetectionSystem = {
       statusText.textContent = isEmpty ? "Phòng trống" : "Có người";
 
       // Update dot color
-      dot.style.backgroundColor = isEmpty ? "#ff0000" : "#4CAF50";
+      dot.style.backgroundColor = isEmpty ? "#4CAF50" : "#ff0000";
 
       // Add animation
       dot.classList.remove("status-update");
