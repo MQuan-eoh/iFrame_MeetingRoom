@@ -401,13 +401,31 @@
 
 .stats-row {
   display: flex;
-  width: 100%;
+  justify-content: space-between;
   align-items: center;
-  gap: 10px;
-  overflow: hidden; /* Giữ cho nội dung không bị tràn */
-  color: #000;
-  justify-content: start;
-  flex: 1; /* Cho phép các phần tử co giãn */
+  gap: 20px;
+}
+
+.people-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.people-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: #ff0000;
+  transition: background-color 0.3s ease;
+}
+
+.people-status-text {
+  font-size: 14px;
+  color: #ffffff;
+  font-weight: 500;
 }
 
 .meeting-info {
@@ -1985,6 +2003,7 @@ schedule-table {
 .modal-overlay.active {
   display: block;
 }
+
 /* Animation keyframes */
 @keyframes modalFadeIn {
   from {
@@ -3299,4 +3318,112 @@ button:hover {
   height: 8px;
   background: #ef4444;
   border-radius: 50%;
+}
+
+.people-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.indicator-dot,
+.people-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.status-text,
+.people-status-text {
+  font-size: 14px;
+  color: #ffffff;
+  font-weight: 500;
+}
+
+.indicator-dot.busy {
+  background-color: #ff0000;
+}
+
+.indicator-dot.available {
+  background-color: #4caf50;
+}
+
+.people-dot {
+  background-color: #ff0000;
+}
+
+.people-indicator.occupied .people-dot {
+  background-color: #4caf50;
+}
+
+/* Status indicators styling */
+.indicators-container {
+  margin-top: 10px;
+  padding: 5px 0;
+}
+
+.status-group {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+}
+
+.status-indicator,
+.people-indicator {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 4px;
+  /* background: rgba(255, 255, 255, 0.1); */
+  flex: 1;
+  min-width: 120px;
+}
+
+.indicator-dot,
+.people-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+
+.indicator-dot.busy {
+  background-color: #ff0000;
+}
+
+.people-dot {
+  background-color: #ff0000;
+}
+
+.people-dot.occupied {
+  background-color: #4caf50;
+}
+
+.status-text,
+.people-status-text {
+  font-size: 12px;
+  color: #000000;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Animation for status updates */
+@keyframes statusPulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.status-update {
+  animation: statusPulse 0.5s ease;
 }

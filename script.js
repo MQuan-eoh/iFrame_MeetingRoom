@@ -1536,18 +1536,19 @@ function padZero(num) {
 // Gọi hàm khởi tạo khi trang đã load
 document.addEventListener("DOMContentLoaded", initClock);
 document.addEventListener("DOMContentLoaded", function () {
+  PeopleDetectionSystem.initialize();
   const datePicker = document.getElementById("meetingDate");
   const today = new Date();
-  const formattedDate = today.tfoISOString().split("T")[0];
+  // Fix the date formatting
+  const formattedDate = today.toISOString().split("T")[0];
   datePicker.value = formattedDate;
   hideProgressBar();
 
   datePicker.addEventListener("change", async function () {
     const selectedDate = new Date(this.value);
-    const dateStr = `${padZero(selectedDate.getDate())}/${padZero(
+    const dateStr = `${padZero(selectedDate.getDate())}-${padZero(
       selectedDate.getMonth() + 1
-    )}/${selectedDate.getFullYear()}`;
-
+    )}-${selectedDate.getFullYear()}`;
     const filteredData = await readFromFirebase(dateStr);
     updateScheduleTable(filteredData);
   });
@@ -2030,7 +2031,7 @@ function renderRoomPage(data, roomKeyword, roomName) {
             </div>
             </div>
           </div>
-          <div class="ac-card"data-room="${roomName.toLowerCase()}">
+          <div class="ac-card" data-room="${roomName.toLowerCase()}">
             <div class="card-content">
               <img alt="Air conditioner icon" height="30" src="https://storage.googleapis.com/a1aa/image/njDqCVkQeJWBSiJfuEdErKceXH7wtLOLqr3glGdBuqpkg6EoA.jpg" width="30" />
               <div class="main-content">
@@ -2058,10 +2059,12 @@ function renderRoomPage(data, roomKeyword, roomName) {
                   </button>
                 </div>
 
-               <div class="status-air">
-              <div class="status-air-dot" style="background-color: ${statusColor}"></div>
-              <span>${statusText}</span>
-            </div>
+               <div class="status-container">
+                <div class="status-air">
+                    <div class="status-air-dot" style="background-color: ${statusColor}"></div>
+                    <span>${statusText}</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -2087,7 +2090,6 @@ function renderRoomPage(data, roomKeyword, roomName) {
                 currentMeeting ? currentMeeting.endTime : "--:--"
               }</span>
             </div>
-          </div>
           <div class="purpose">MỤC ĐÍCH SỬ DỤNG</div>
           <div class="purpose-value">${
             currentMeeting ? currentMeeting.purpose : "Chưa xác định"
@@ -2257,33 +2259,6 @@ function isValidMeetingState(meeting, currentTime) {
   return isTimeValid;
 }
 
-// async function readFromFirebase(dateStr) {
-//   try {
-//     // Chuyển đổi YYYY-MM-DD -> DD-MM-YYYY
-//     const [year, month, day] = dateStr.split("-");
-//     const firebaseDateKey = `${day}-${month}-${year}`;
-
-//     const snapshot = await database.ref(firebaseDateKey).once("value");
-//     if (!snapshot.exists()) return [];
-
-//     const data = [];
-
-//     snapshot.forEach((roomSnapshot) => {
-//       const roomName = roomSnapshot.key;
-//       roomSnapshot.forEach((meetingSnapshot) => {
-//         data.push({
-//           ...meetingSnapshot.val(),
-//           room: roomName, // Khôi phục tên phòng chính xác
-//         });
-//       });
-//     });
-
-//     return data;
-//   } catch (error) {
-//     console.error("Firebase read error:", error);
-//     return [];
-//   }
-// }
 async function readFromFirebase(dateKey) {
   try {
     const snapshot = await database.ref(dateKey).once("value");
@@ -2405,14 +2380,6 @@ function handleEndMeeting(event) {
       // Cập nhật cache và localStorage
       fileCache.data = updatedData;
       fileCache.lastModified = new Date().getTime();
-
-      // localStorage.setItem(
-      //   "fileCache",
-      //   JSON.stringify({
-      //     data: updatedData,
-      //     lastModified: fileCache.lastModified,
-      //   })
-      // );
 
       // Lọc lại các cuộc họp trong ngày
       const today = new Date();
@@ -2537,7 +2504,10 @@ let configTemp = null,
   actionOn3 = null,
   valueAir1 = null,
   valueAir2 = null,
-  valueAir3 = null;
+  valueAir3 = null,
+  configPeopleDetection1 = null, // Lotus
+  configPeopleDetection2 = null, // Lavender 1
+  configPeopleDetection3 = null; // Lavender 2
 
 eraWidget.init({
   onConfiguration: (configuration) => {
@@ -2546,8 +2516,8 @@ eraWidget.init({
     configHumi = configuration.realtime_configs[1];
     configCurrent = configuration.realtime_configs[2];
     configVoltage = configuration.realtime_configs[3];
-
-    configTemp2 = configuration.realtime_configs[4];
+    configPeopleDetection1 = configuration.realtime_configs[4];
+    configTemp2 = configuration.realtime_configs[15];
     configHumi2 = configuration.realtime_configs[5];
     configCurrent2 = configuration.realtime_configs[6];
     configPower2 = configuration.realtime_configs[7];
@@ -2560,19 +2530,10 @@ eraWidget.init({
     configAirConditioner = configuration.realtime_configs[12];
     configAirConditioner2 = configuration.realtime_configs[13];
     configAirConditioner3 = configuration.realtime_configs[14];
+    // People detection sensors
 
-    actionOn1 = configuration.actions[0]; // Lưu cấu hình hành động : On
-    actionOff1 = configuration.actions[1]; // Lưu cấu hình hành động : Off
-
-    actionOn2 = configuration.actions[2]; // Lưu cấu hình hành động : On
-    actionOff2 = configuration.actions[3]; // Lưu cấu hình hành động : Off
-
-    actionOn3 = configuration.actions[4]; // Lưu cấu hình hành động : On
-    actionOff3 = configuration.actions[5]; // Lưu cấu hình hành động : Off
-
-    valueAir1 = configuration.actions[6];
-    valueAir2 = configuration.actions[7];
-    valueAir3 = configuration.actions[8];
+    configPeopleDetection2 = configuration.realtime_configs[16];
+    configPeopleDetection3 = configuration.realtime_configs[17];
   },
   // Hàm lấy giá trị từ các ID và cập nhật giao diện
   onValues: (values) => {
@@ -2636,11 +2597,6 @@ eraWidget.init({
       if (humi) humi.textContent = humidValue;
     }
 
-    // if (configCurrent && values[configCurrent.id]) {
-    //   const currentValue = values[configCurrent.id].value;
-    //   currentIndex.textContent = currentValue;
-    //   updateRoomTemperatureDisplay("lotus", values[configCurrent.id].value);
-    // }
     if (configCurrent && values[configCurrent.id]) {
       updateRoomElements(
         "lotus",
@@ -2663,14 +2619,6 @@ eraWidget.init({
       if (humi2) humi2.textContent = humidValue2;
     }
 
-    // if (configCurrent2 && values[configCurrent2.id]) {
-    //   const currentValue2 = values[configCurrent2.id].value;
-    //   if (currentIndex2) currentIndex2.textContent = currentValue2;
-    //   updateRoomTemperatureDisplay(
-    //     "lavender-1",
-    //     values[configCurrent2.id].value
-    //   );
-    // }
     // Lavender 1 Room
     if (configCurrent2 && values[configCurrent2.id]) {
       updateRoomElements(
@@ -2695,14 +2643,6 @@ eraWidget.init({
       if (humi3) humi3.textContent = humidValue3;
     }
 
-    // if (configCurrent3 && values[configCurrent3.id]) {
-    //   const currentValue3 = values[configCurrent3.id].value;
-    //   if (currentIndex3) currentIndex3.textContent = currentValue3;
-    //   updateRoomTemperatureDisplay(
-    //     "lavender-2",
-    //     values[configCurrent3.id].value
-    //   );
-    // }
     // Lavender 2 Room
     if (configCurrent3 && values[configCurrent3.id]) {
       updateRoomElements(
@@ -2717,12 +2657,6 @@ eraWidget.init({
       if (powerIndex3) powerIndex3.textContent = powerValue3;
     }
 
-    // if (configAirConditioner && values[configAirConditioner.id]) {
-    //   const airValue = values[configAirConditioner.id].value;
-    //   roomTemperatures.lotus = parseFloat(airValue);
-    //   updateRoomTemperatureDisplay("lotus", airValue);
-    //   console.log("Air Value (lotus):", airValue);
-    // }
     if (configAirConditioner && values[configAirConditioner.id]) {
       const airValue = values[configAirConditioner.id].value;
       roomTemperatures.lotus = parseFloat(airValue);
@@ -2740,6 +2674,26 @@ eraWidget.init({
       TemperatureManager.updateDisplay("lavender-2", airValue3);
     }
 
+    if (configPeopleDetection1 && values[configPeopleDetection1.id]) {
+      PeopleDetectionSystem.updateStatus(
+        "lotus",
+        values[configPeopleDetection1.id].value
+      );
+    }
+
+    if (configPeopleDetection2 && values[configPeopleDetection2.id]) {
+      PeopleDetectionSystem.updateStatus(
+        "lavender-1",
+        values[configPeopleDetection2.id].value
+      );
+    }
+
+    if (configPeopleDetection3 && values[configPeopleDetection3.id]) {
+      PeopleDetectionSystem.updateStatus(
+        "lavender-2",
+        values[configPeopleDetection3.id].value
+      );
+    }
     // Update all active rooms
     Object.keys(roomUpdateIntervals).forEach((roomKey) => {
       const eraSuffix = roomEraMap[roomKey];
@@ -2836,3 +2790,288 @@ function updateACStatus(container, room) {
 
   return monitoringInterval;
 }
+
+// Update updatePeopleStatus function
+function updatePeopleStatus(room, value) {
+  const roomKey = normalizeRoomKey(room);
+  const isEmpty = value === 1;
+
+  if (peopleDetectionStates[roomKey].isEmpty !== isEmpty) {
+    peopleDetectionStates[roomKey].isEmpty = isEmpty;
+
+    const roomSection = findRoomSection(capitalizeFirst(roomKey));
+    if (roomSection) {
+      const peopleIndicator = roomSection.querySelector(".people-indicator");
+      const peopleDot = peopleIndicator?.querySelector(".people-dot");
+      const statusText = peopleIndicator?.querySelector(".people-status-text");
+
+      if (peopleDot && statusText) {
+        peopleDot.classList.toggle("occupied", !isEmpty);
+        statusText.textContent = isEmpty ? "Phòng trống" : "Có người";
+
+        // Add animation
+        peopleDot.classList.add("status-update");
+        setTimeout(() => peopleDot.classList.remove("status-update"), 500);
+
+        console.log(
+          `People detection status updated for ${room}: ${
+            isEmpty ? "Empty" : "Occupied"
+          }`
+        );
+      }
+    }
+  }
+}
+
+// People Detection Management System
+// const PeopleDetectionSystem = {
+//   states: {
+//     lotus: { isEmpty: true },
+//     "lavender-1": { isEmpty: true },
+//     "lavender-2": { isEmpty: true },
+//   },
+
+//   config: {
+//     lotus: { sensorId: 4 }, // configPeopleDetection1
+//     "lavender-1": { sensorId: 16 }, // configPeopleDetection2
+//     "lavender-2": { sensorId: 17 }, // configPeopleDetection3
+//   },
+
+//   initialize() {
+//     // Just initialize states
+//     Object.keys(this.states).forEach((roomKey) => {
+//       const room = this.normalizeRoomDisplay(roomKey);
+//       console.log(`Initializing state for ${room}`);
+//       this.updateUI(roomKey, this.states[roomKey].isEmpty);
+//     });
+//   },
+
+//   updateUI(roomKey, isEmpty) {
+//     const room = this.normalizeRoomDisplay(roomKey);
+//     const roomSection = findRoomSection(room);
+
+//     if (!roomSection) {
+//       console.warn(`Room section not found: ${room}`);
+//       return;
+//     }
+
+//     // Use existing HTML elements
+//     const peopleIndicator = roomSection.querySelector(".people-indicator");
+//     if (!peopleIndicator) {
+//       console.warn(`People indicator not found for ${room}`);
+//       return;
+//     }
+
+//     const dot = peopleIndicator.querySelector(".people-dot");
+//     const text = peopleIndicator.querySelector(".people-status-text");
+
+//     if (dot && text) {
+//       // Update status
+//       dot.style.backgroundColor = isEmpty ? "#ff0000" : "#4CAF50";
+//       text.textContent = isEmpty ? "Phòng trống" : "Có người";
+
+//       // Add animation
+//       dot.classList.add("status-update");
+//       setTimeout(() => dot.classList.remove("status-update"), 500);
+
+//       console.log(`Updated ${room} status: ${isEmpty ? "Empty" : "Occupied"}`);
+//     }
+//   },
+//   createPeopleIndicator(roomKey) {
+//     const room = this.normalizeRoomDisplay(roomKey);
+//     // Replace invalid selector with standard DOM traversal
+//     const roomSections = document.querySelectorAll(".room-section");
+//     const roomSection = Array.from(roomSections).find((section) => {
+//       const roomNumber = section.querySelector(".room-number");
+//       return roomNumber && roomNumber.textContent.includes(room);
+//     });
+
+//     if (!roomSection) {
+//       console.warn(`Room section not found for ${room}`);
+//       return;
+//     }
+
+//     // Rest of the function remains the same
+//     const statsRow = roomSection.querySelector(".meeting-stats");
+//     if (!statsRow) {
+//       console.warn(`Stats row not found for ${room}`);
+//       return;
+//     }
+
+//     let indicatorsRow = statsRow.querySelector(".indicators-row");
+//     if (!indicatorsRow) {
+//       indicatorsRow = document.createElement("div");
+//       indicatorsRow.className = "indicators-row";
+//       statsRow.appendChild(indicatorsRow);
+//     }
+
+//     // Add people indicator
+//     const peopleIndicator = document.createElement("div");
+//     peopleIndicator.className = "people-indicator";
+//     peopleIndicator.innerHTML = `
+//         <div class="indicator-group">
+//             <div class="people-dot"></div>
+//             <div class="people-status-text">Đang kiểm tra...</div>
+//         </div>
+//     `;
+//     indicatorsRow.appendChild(peopleIndicator);
+//     console.log(`People indicator created for ${room}`);
+//   },
+
+//   updateStatus(roomKey, value) {
+//     const isEmpty = value === 1;
+//     const prevState = this.states[roomKey].isEmpty;
+
+//     if (prevState !== isEmpty) {
+//       this.states[roomKey].isEmpty = isEmpty;
+//       this.updateUI(roomKey, isEmpty);
+//       console.log(
+//         `${roomKey} occupancy changed: ${isEmpty ? "Empty" : "Occupied"}`
+//       );
+//     }
+//   },
+
+//   updateUI(roomKey, isEmpty) {
+//     const room = this.normalizeRoomDisplay(roomKey);
+//     const roomSection = document.querySelector(
+//       `.room-section:has(.room-number:contains("${room}"))`
+//     );
+
+//     if (!roomSection) return;
+
+//     const peopleIndicator = roomSection.querySelector(".people-indicator");
+//     if (!peopleIndicator) return;
+
+//     const dot = peopleIndicator.querySelector(".people-dot");
+//     const text = peopleIndicator.querySelector(".people-status-text");
+
+//     // Update visual indicators
+//     dot.style.backgroundColor = isEmpty ? "#ff0000" : "#4CAF50";
+//     text.textContent = isEmpty ? "Phòng trống" : "Có người";
+
+//     // Add animation
+//     dot.classList.add("status-update");
+//     setTimeout(() => dot.classList.remove("status-update"), 500);
+//   },
+
+//   normalizeRoomDisplay(roomKey) {
+//     const names = {
+//       lotus: "Lotus",
+//       "lavender-1": "Lavender 1",
+//       "lavender-2": "Lavender 2",
+//     };
+//     return names[roomKey] || roomKey;
+//   },
+// };
+
+// Add this utility function at the top of your file
+function findRoomSection(roomName) {
+  const sections = document.querySelectorAll(".room-section");
+  console.debug(`Searching for room: ${roomName}`);
+  console.debug(`Found ${sections.length} room sections`);
+
+  const found = Array.from(sections).find((section) => {
+    const roomNumber = section.querySelector(".room-number");
+    const match = roomNumber && roomNumber.textContent.trim() === roomName;
+    console.debug(
+      `Checking section: ${roomNumber?.textContent.trim()} -> ${match}`
+    );
+    return match;
+  });
+
+  if (!found) {
+    console.warn(`No section found for room: ${roomName}`);
+  }
+  return found;
+}
+
+const PeopleDetectionSystem = {
+  states: {
+    lotus: { isEmpty: true },
+    "lavender-1": { isEmpty: true },
+    "lavender-2": { isEmpty: true },
+  },
+
+  normalizeRoomDisplay(roomKey) {
+    // Match the exact HTML structure
+    const names = {
+      lotus: "Lotus",
+      "lavender-1": "Lavender 1",
+      "lavender-2": "Lavender 2",
+    };
+    return names[roomKey] || roomKey;
+  },
+  validateRoomStructure() {
+    Object.keys(this.states).forEach((roomKey) => {
+      const room = this.normalizeRoomDisplay(roomKey);
+      const section = findRoomSection(room);
+
+      if (!section) {
+        console.error(`Room section missing: ${room}`);
+        return;
+      }
+
+      const indicators = {
+        peopleIndicator: section.querySelector(".people-indicator"),
+        dot: section.querySelector(".people-dot"),
+        statusText: section.querySelector(".people-status-text"),
+      };
+
+      const missingElements = Object.entries(indicators)
+        .filter(([_, element]) => !element)
+        .map(([name]) => name);
+
+      if (missingElements.length > 0) {
+        console.error(`Missing elements for ${room}:`, missingElements);
+      }
+    });
+  },
+  initialize() {
+    Object.keys(this.states).forEach((roomKey) => {
+      const room = this.normalizeRoomDisplay(roomKey);
+      console.log(`Initializing state for ${room}`);
+      this.updateUI(roomKey, this.states[roomKey].isEmpty);
+    });
+    console.log("People Detection System initialized");
+  },
+
+  updateUI(roomKey, isEmpty) {
+    const room = this.normalizeRoomDisplay(roomKey);
+    const roomSection = findRoomSection(room);
+
+    if (!roomSection) {
+      console.warn(`Room section not found: ${room}`);
+      return;
+    }
+
+    const peopleIndicator = roomSection.querySelector(".people-indicator");
+    if (!peopleIndicator) {
+      console.warn(`People indicator not found for ${room}`);
+      return;
+    }
+
+    const dot = peopleIndicator.querySelector(".people-dot");
+    const text = peopleIndicator.querySelector(".people-status-text");
+
+    if (dot && text) {
+      dot.style.backgroundColor = isEmpty ? "#ff0000" : "#4CAF50";
+      text.textContent = isEmpty ? "Phòng trống" : "Có người";
+
+      // Add animation
+      dot.classList.add("status-update");
+      setTimeout(() => dot.classList.remove("status-update"), 500);
+
+      console.log(`Updated ${room} status: ${isEmpty ? "Empty" : "Occupied"}`);
+    }
+  },
+
+  normalizeRoomDisplay(roomKey) {
+    // Map room keys to display names
+    const names = {
+      lotus: "Phòng Lotus",
+      "lavender-1": "Phòng Lavender 1",
+      "lavender-2": "Phòng Lavender 2",
+    };
+    return names[roomKey] || roomKey;
+  },
+};
