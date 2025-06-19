@@ -1792,10 +1792,10 @@ function renderRoomPage(data, roomKeyword, roomName) {
     roomName,
   });
   // Lọc các cuộc họp cho phòng
-  const roomMeetings = data.filter((meeting) =>
-    // meeting.room.toLowerCase().includes(roomKeyword.toLowerCase())
-    meeting.room.toLowerCase().replace(/\s+/g, "-")
-  );
+  const roomMeetings = data.filter((meeting) => {
+    const normalizedRoom = meeting.room.toLowerCase().replace(/\s+/g, "-");
+    return normalizedRoom.includes(roomKeyword);
+  });
   console.log("Filtered room meetings:", roomMeetings);
 
   // Lọc các cuộc họp diễn ra trong ngày
@@ -2245,19 +2245,18 @@ function setupEndMeetingHandlers() {
   dynamicContent._endMeetingHandler = newHandler;
   dynamicContent.addEventListener("click", newHandler);
 }
+// Thêm hàm kiểm tra trạng thái kết thúc của cuộc họp
 function isValidMeetingState(meeting, currentTime) {
-  if (!meeting || !currentTime) return false;
+  if (!meeting) return false;
 
-  // Check if meeting is already ended
-  if (meeting.isEnded || meeting.forceEndedByUser) return false;
+  // Nếu cuộc họp đã được đánh dấu kết thúc, luôn trả về false
+  if (meeting.isEnded) return false;
 
-  // Parse times to compare
-  const current = timeToMinutes(currentTime);
-  const start = timeToMinutes(meeting.startTime);
-  const end = timeToMinutes(meeting.endTime);
+  // Kiểm tra thời gian hiện tại có nằm trong khoảng thời gian họp hay không
+  const isTimeValid =
+    currentTime >= meeting.startTime && currentTime <= meeting.endTime;
 
-  // Check if current time is within meeting time range
-  return current >= start && current <= end;
+  return isTimeValid;
 }
 
 async function readFromFirebase(dateKey) {
@@ -2335,88 +2334,80 @@ async function writeToFirebase(data) {
   }
 }
 
-async function handleEndMeeting(event) {
-  const isConfirmed = confirm(
-    "Bạn có chắc chắn muốn kết thúc cuộc họp này không?"
-  );
-  if (!isConfirmed) {
-    console.log("End meeting cancelled");
+function handleEndMeeting(event) {
+  // Hiển thị hộp thoại xác nhận
+  const cachedData = JSON.parse(localStorage.getItem("fileCache"));
+  if (!cachedData || !cachedData.data) {
+    console.error("No meeting data found!");
     return;
   }
 
-  try {
-    // Get current meeting info
-    const currentTime = getCurrentTime();
-    const currentDate = getCurrentDate();
-    const mainPanel = event.target.closest(".main-panel");
-    const roomName = mainPanel.querySelector("h1").textContent;
+  const data = cachedData.data;
+  const currentTime = getCurrentTime();
+  const currentDate = getCurrentDate();
+  const roomName = event.target
+    .closest(".main-panel")
+    .querySelector("h1").textContent;
 
-    // Get today's meetings from Firebase
-    const dateKey = `${currentDate.split("/").join("-")}`;
-    const meetings = await readFromFirebase(dateKey);
+  // Tìm cuộc họp hiện tại
+  const roomMeetings = data.filter(
+    (meeting) =>
+      meeting.room.toLowerCase().replace(/\s+/g, "-") &&
+      meeting.date === currentDate
+  );
 
-    if (!meetings || meetings.length === 0) {
-      console.error("No meetings found for today");
-      return;
-    }
+  const currentMeeting = roomMeetings.find((meeting) =>
+    isValidMeetingState(meeting, currentTime)
+  );
 
-    // Find current active meeting
-    const currentMeeting = meetings.find(
-      (meeting) =>
-        meeting.room.toLowerCase().includes(roomName.toLowerCase()) &&
-        isValidMeetingState(meeting, currentTime) &&
-        !meeting.isEnded
+  if (currentMeeting) {
+    const updatedData = [...data];
+    const currentMeetingIndex = updatedData.findIndex(
+      (meeting) => meeting.id === currentMeeting.id
     );
 
-    if (!currentMeeting) {
-      console.error("No active meeting found");
-      return;
-    }
+    if (currentMeetingIndex !== -1) {
+      // Cập nhật thông tin cuộc họp với flag đặc biệt
+      updatedData[currentMeetingIndex] = {
+        ...currentMeeting,
+        endTime: currentTime,
+        isEnded: true,
+        lastUpdated: new Date().getTime(),
+        originalEndTime: currentMeeting.endTime,
+        forceEndedByUser: true, // Thêm flag mới để đánh dấu cuộc họp đã được kết thúc bởi người dùng
+      };
 
-    // Update meeting status
-    const updatedMeeting = {
-      ...currentMeeting,
-      endTime: currentTime,
-      isEnded: true,
-      lastUpdated: new Date().getTime(),
-      originalEndTime: currentMeeting.endTime,
-      forceEndedByUser: true,
-    };
+      // Cập nhật cache và localStorage
+      fileCache.data = updatedData;
+      fileCache.lastModified = new Date().getTime();
 
-    // Update meetings array
-    const updatedMeetings = meetings.map((meeting) =>
-      meeting.id === currentMeeting.id ? updatedMeeting : meeting
-    );
+      // Lọc lại các cuộc họp trong ngày
+      const today = new Date();
+      const todayMeetings = updatedData.filter((meeting) => {
+        const meetingDate = new Date(
+          meeting.date.split("/").reverse().join("-")
+        );
+        return meetingDate.toDateString() === today.toDateString();
+      });
 
-    // Update Firebase
-    await writeToFirebase(updatedMeetings);
-
-    // Update local cache
-    fileCache.data = updatedMeetings;
-    fileCache.lastModified = new Date().getTime();
-
-    // Update UI
-    updateScheduleTable(updatedMeetings);
-    updateRoomStatus(updatedMeetings);
-
-    // Reload room page if needed
-    const dynamicContent = document.getElementById("dynamicPageContent");
-    if (dynamicContent.style.display === "block") {
+      writeToFirebase(todayMeetings);
+      // Cập nhật giao diện
+      updateRoomStatus(updatedData);
+      updateScheduleTable(todayMeetings);
       renderRoomPage(
-        updatedMeetings,
+        updatedData,
         roomName.toLowerCase().replace(/\s+/g, "-"),
-        roomName
+        roomName.toLowerCase().replace(/\s+/g, "-")
       );
-    }
 
-    console.log("Meeting ended successfully:", {
-      room: roomName,
-      originalEndTime: currentMeeting.endTime,
-      actualEndTime: currentTime,
-    });
-  } catch (error) {
-    console.error("Error ending meeting:", error);
-    alert("Có lỗi xảy ra khi kết thúc cuộc họp. Vui lòng thử lại.");
+      console.log(`Meeting ended early:`, {
+        room: roomName,
+        originalEndTime: currentMeeting.endTime,
+        actualEndTime: currentTime,
+        isEnded: true,
+        forceEndedByUser: true,
+      });
+    }
   }
 }
 
@@ -2836,147 +2827,6 @@ function updatePeopleStatus(room, value) {
   }
 }
 
-// People Detection Management System
-// const PeopleDetectionSystem = {
-//   states: {
-//     lotus: { isEmpty: true },
-//     "lavender-1": { isEmpty: true },
-//     "lavender-2": { isEmpty: true },
-//   },
-
-//   config: {
-//     lotus: { sensorId: 4 }, // configPeopleDetection1
-//     "lavender-1": { sensorId: 16 }, // configPeopleDetection2
-//     "lavender-2": { sensorId: 17 }, // configPeopleDetection3
-//   },
-
-//   initialize() {
-//     // Just initialize states
-//     Object.keys(this.states).forEach((roomKey) => {
-//       const room = this.normalizeRoomDisplay(roomKey);
-//       console.log(`Initializing state for ${room}`);
-//       this.updateUI(roomKey, this.states[roomKey].isEmpty);
-//     });
-//   },
-
-//   updateUI(roomKey, isEmpty) {
-//     const room = this.normalizeRoomDisplay(roomKey);
-//     const roomSection = findRoomSection(room);
-
-//     if (!roomSection) {
-//       console.warn(`Room section not found: ${room}`);
-//       return;
-//     }
-
-//     // Use existing HTML elements
-//     const peopleIndicator = roomSection.querySelector(".people-indicator");
-//     if (!peopleIndicator) {
-//       console.warn(`People indicator not found for ${room}`);
-//       return;
-//     }
-
-//     const dot = peopleIndicator.querySelector(".people-dot");
-//     const text = peopleIndicator.querySelector(".people-status-text");
-
-//     if (dot && text) {
-//       // Update status
-//       dot.style.backgroundColor = isEmpty ? "#ff0000" : "#4CAF50";
-//       text.textContent = isEmpty ? "Phòng trống" : "Có người";
-
-//       // Add animation
-//       dot.classList.add("status-update");
-//       setTimeout(() => dot.classList.remove("status-update"), 500);
-
-//       console.log(`Updated ${room} status: ${isEmpty ? "Empty" : "Occupied"}`);
-//     }
-//   },
-//   createPeopleIndicator(roomKey) {
-//     const room = this.normalizeRoomDisplay(roomKey);
-//     // Replace invalid selector with standard DOM traversal
-//     const roomSections = document.querySelectorAll(".room-section");
-//     const roomSection = Array.from(roomSections).find((section) => {
-//       const roomNumber = section.querySelector(".room-number");
-//       return roomNumber && roomNumber.textContent.includes(room);
-//     });
-
-//     if (!roomSection) {
-//       console.warn(`Room section not found for ${room}`);
-//       return;
-//     }
-
-//     // Rest of the function remains the same
-//     const statsRow = roomSection.querySelector(".meeting-stats");
-//     if (!statsRow) {
-//       console.warn(`Stats row not found for ${room}`);
-//       return;
-//     }
-
-//     let indicatorsRow = statsRow.querySelector(".indicators-row");
-//     if (!indicatorsRow) {
-//       indicatorsRow = document.createElement("div");
-//       indicatorsRow.className = "indicators-row";
-//       statsRow.appendChild(indicatorsRow);
-//     }
-
-//     // Add people indicator
-//     const peopleIndicator = document.createElement("div");
-//     peopleIndicator.className = "people-indicator";
-//     peopleIndicator.innerHTML = `
-//         <div class="indicator-group">
-//             <div class="people-dot"></div>
-//             <div class="people-status-text">Đang kiểm tra...</div>
-//         </div>
-//     `;
-//     indicatorsRow.appendChild(peopleIndicator);
-//     console.log(`People indicator created for ${room}`);
-//   },
-
-//   updateStatus(roomKey, value) {
-//     const isEmpty = value === 1;
-//     const prevState = this.states[roomKey].isEmpty;
-
-//     if (prevState !== isEmpty) {
-//       this.states[roomKey].isEmpty = isEmpty;
-//       this.updateUI(roomKey, isEmpty);
-//       console.log(
-//         `${roomKey} occupancy changed: ${isEmpty ? "Empty" : "Occupied"}`
-//       );
-//     }
-//   },
-
-//   updateUI(roomKey, isEmpty) {
-//     const room = this.normalizeRoomDisplay(roomKey);
-//     const roomSection = document.querySelector(
-//       `.room-section:has(.room-number:contains("${room}"))`
-//     );
-
-//     if (!roomSection) return;
-
-//     const peopleIndicator = roomSection.querySelector(".people-indicator");
-//     if (!peopleIndicator) return;
-
-//     const dot = peopleIndicator.querySelector(".people-dot");
-//     const text = peopleIndicator.querySelector(".people-status-text");
-
-//     // Update visual indicators
-//     dot.style.backgroundColor = isEmpty ? "#ff0000" : "#4CAF50";
-//     text.textContent = isEmpty ? "Phòng trống" : "Có người";
-
-//     // Add animation
-//     dot.classList.add("status-update");
-//     setTimeout(() => dot.classList.remove("status-update"), 500);
-//   },
-
-//   normalizeRoomDisplay(roomKey) {
-//     const names = {
-//       lotus: "Lotus",
-//       "lavender-1": "Lavender 1",
-//       "lavender-2": "Lavender 2",
-//     };
-//     return names[roomKey] || roomKey;
-//   },
-// };
-
 // Add this utility function at the top of your file
 function findRoomSection(roomName) {
   const sections = document.querySelectorAll(".room-section");
@@ -3106,7 +2956,7 @@ const PeopleDetectionSystem = {
       statusText.textContent = isEmpty ? "Phòng trống" : "Có người";
 
       // Update dot color
-      dot.style.backgroundColor = isEmpty ? "#4CAF50" : "#ff0000";
+      dot.style.backgroundColor = isEmpty ? "#ff0000" : "#4CAF50";
 
       // Add animation
       dot.classList.remove("status-update");
