@@ -534,6 +534,18 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   });
 });
+document.addEventListener("click", function (event) {
+  if (event.target.classList.contains("end-meeting")) {
+    event.preventDefault();
+
+    const isConfirmed = confirm(
+      "Bạn có chắc chắn muốn kết thúc cuộc họp này không?"
+    );
+    if (!isConfirmed) return;
+
+    handleEndMeeting(event);
+  }
+});
 
 document
   .getElementById("stopUploadBtn")
@@ -1787,107 +1799,39 @@ let roomUpdateIntervals = {};
 function renderRoomPage(data, roomKeyword, roomName) {
   console.log("Rendering room page for:", roomName);
   console.log("Data received:", data);
-  console.log("=== INITIAL ROOM RENDER ===", {
-    roomKeyword,
-    roomName,
-  });
-  // Lọc các cuộc họp cho phòng
+
+  // Chuẩn hóa tên phòng để so sánh
+  const normalizeRoomForComparison = (name) =>
+    name.toLowerCase().replace("phòng", "").replace("p.", "").trim();
+
+  const targetRoomNormalized = normalizeRoomForComparison(roomName);
+
+  // Lọc các cuộc họp cho phòng cụ thể
   const roomMeetings = data.filter((meeting) => {
-    const normalizedRoom = meeting.room.toLowerCase().replace(/\s+/g, "-");
-    return normalizedRoom.includes(roomKeyword);
+    const meetingRoomNormalized = normalizeRoomForComparison(meeting.room);
+    return meetingRoomNormalized === targetRoomNormalized;
   });
+
   console.log("Filtered room meetings:", roomMeetings);
 
   // Lọc các cuộc họp diễn ra trong ngày
   const today = new Date();
-  const filteredData = roomMeetings.filter((meeting) => {
-    const meetingDate = new Date(meeting.date.split("/").reverse().join("-"));
-    return meetingDate.toDateString() === today.toDateString();
-  });
+  const todayStr = `${String(today.getDate()).padStart(2, "0")}/${String(
+    today.getMonth() + 1
+  ).padStart(2, "0")}/${today.getFullYear()}`;
+
+  const filteredData = roomMeetings.filter(
+    (meeting) => meeting.date === todayStr
+  );
+
   console.log("Today's meetings:", filteredData);
 
   const roomKey = normalizeRoomKey(roomKeyword);
   const eraSuffix = roomEraMap[roomKey];
-  const isAcOn = acStates[roomKey].isOn;
+  const isAcOn = acStates[roomKey]?.isOn || false;
   const statusColor = isAcOn ? "#4CAF50" : "#ff0000";
   const statusText = isAcOn ? "Online" : "Offline";
   const powerStats = getRoomPowerStats(eraSuffix);
-  console.log("Normalized room key:", roomKey);
-  console.log("ERA suffix:", eraSuffix);
-  console.log("Initial power stats:", powerStats);
-
-  // Initialize room state if it doesn't exist
-  if (!acStates[roomKey]) {
-    console.log(`Initializing new state for room ${roomKey}`);
-    acStates[roomKey] = {
-      isOn: false,
-      roomTemperatures: 20,
-      minTemp: 16,
-      maxTemp: 30,
-      current: powerStats.current,
-      power: powerStats.power,
-    };
-  } else {
-    console.log(`Updating existing state for room ${roomKey}`);
-    console.log("Previous state:", acStates[roomKey]);
-    acStates[roomKey].current = powerStats.current;
-    acStates[roomKey].power = powerStats.power;
-    console.log("Updated state:", acStates[roomKey]);
-  }
-  // Cleanup existing interval nếu có
-  // if (roomUpdateIntervals[roomKey]) {
-  //   console.log(`Cleaning up existing interval for ${roomKey}`);
-  //   clearInterval(roomUpdateIntervals[roomKey]);
-  // }
-
-  // Add debug logging to updateACStatus
-  const originalUpdateACStatus = updateACStatus;
-  updateACStatus = function (container, room) {
-    console.log("=== AC Status Update Debug ===");
-    console.log(`Updating AC status for room: ${room}`);
-    console.log("Current AC state:", acStates[room]);
-
-    const roomKey = normalizeRoomKey(room);
-    const eraSuffix = roomEraMap[roomKey];
-    console.log(
-      `Getting real-time stats for ${room} (ERA suffix: ${eraSuffix})`
-    );
-
-    const powerStats = getRoomPowerStats(eraSuffix);
-    console.log("Current power stats:", powerStats);
-
-    originalUpdateACStatus(container, room);
-
-    console.log("Updated AC state:", acStates[room]);
-  };
-
-  // Add debug logging to the eraWidget onValues callback
-  const originalOnValues = eraWidget.init.onValues;
-  eraWidget.init.onValues = function (values) {
-    console.log("=== ERA Widget Values Update Debug ===");
-    console.log("Received values:", values);
-
-    if (configCurrent && values[configCurrent.id]) {
-      console.log(
-        `Room ${roomKey} current value update:`,
-        values[configCurrent.id].value
-      );
-    }
-    if (configPower && values[configPower.id]) {
-      console.log(
-        `Room ${roomKey} power value update:`,
-        values[configPower.id].value
-      );
-    }
-
-    originalOnValues(values);
-  };
-
-  const valueAirMap = {
-    lotus: valueAir1,
-    "lavender-1": valueAir2,
-    "lavender-2": valueAir3,
-  };
 
   // Lấy thời gian hiện tại
   const currentTime = new Date();
@@ -1896,103 +1840,83 @@ function renderRoomPage(data, roomKeyword, roomName) {
     "0"
   )}:${String(currentTime.getMinutes()).padStart(2, "0")}`;
 
-  // Tìm cuộc họp đang diễn ra
-  const currentMeeting = filteredData.find((meeting) => {
+  // Tìm cuộc họp đang diễn ra hoặc sắp diễn ra
+  let currentMeeting = null;
+  let upcomingMeetings = [];
+
+  filteredData.forEach((meeting) => {
     const startTime = meeting.startTime;
     const endTime = meeting.endTime;
-    return currentTimeStr >= startTime && currentTimeStr <= endTime;
-  });
-  console.log("Current meeting:", currentMeeting);
 
-  // Lọc các cuộc họp sắp diễn ra
-  const upcomingMeetings = filteredData
-    .filter((meeting) => {
-      const startTime = meeting.startTime;
-      return currentTimeStr <= startTime;
-    })
-    .sort((a, b) => {
-      const timeA = a.startTime.split(":").map(Number);
-      const timeB = b.startTime.split(":").map(Number);
-      return timeA[0] * 60 + timeA[1] - (timeB[0] * 60 + timeB[1]);
-    });
-  console.log("Upcoming meetings:", upcomingMeetings);
-  setTimeout(() => {
-    const container = document.querySelector(".container");
-    if (!container) return;
-
-    // Find AC card for this room
-    const acCard = container.querySelector(
-      `.ac-card[data-room="${roomName.toLowerCase()}"]`
-    );
-    if (acCard) {
-      // Start monitoring AC status
-      updateACStatus(acCard, roomKeyword);
+    // Kiểm tra xem cuộc họp có đang diễn ra không
+    if (
+      currentTimeStr >= startTime &&
+      currentTimeStr <= endTime &&
+      !meeting.isEnded
+    ) {
+      currentMeeting = meeting;
     }
+    // Nếu không có cuộc họp đang diễn ra, tìm cuộc họp sắp diễn ra
+    else if (currentTimeStr <= startTime) {
+      upcomingMeetings.push(meeting);
+    }
+  });
 
-    container.addEventListener("click", (e) => {
-      const acCard = e.target.closest(".ac-card");
-      if (!acCard) return;
-      const room = acCard.dataset.room.toLowerCase(); // Lấy tên phòng từ data-room
-      const valueAir = valueAirMap[room];
-      if (!valueAir) {
-        console.error(`Không tìm thấy valueAir cho phòng: ${room}`);
-        return;
-      }
+  // Sắp xếp các cuộc họp sắp diễn ra theo thời gian
+  upcomingMeetings.sort((a, b) => {
+    const timeA = a.startTime.split(":").map(Number);
+    const timeB = b.startTime.split(":").map(Number);
+    return timeA[0] * 60 + timeA[1] - (timeB[0] * 60 + timeB[1]);
+  });
 
-      // Kiểm tra và khởi tạo acStates nếu chưa có phòng này
-      if (!acStates[room]) {
-        acStates[room] = {
-          isOn: false,
-          roomTemperatures: 20,
-          minTemp: 16,
-          maxTemp: 30,
-        };
-      }
+  // Tạo nút End Meeting nếu có cuộc họp đang diễn ra
+  const endMeetingButton =
+    currentMeeting && !currentMeeting.isEnded
+      ? `<button class="end-meeting">END MEETING</button>`
+      : "";
 
-      // Chọn phần tử hiển thị nhiệt độ
-      const tempDisplay = acCard.querySelector(".temperature-air");
+  // Tạo template cho cuộc họp hiện tại
+  const currentMeetingTemplate = currentMeeting
+    ? `
+    <div class="main-panel">
+      <h1>${currentMeeting.room}</h1>
+      <div class="current-status">${
+        currentMeeting.isEnded ? "ĐÃ KẾT THÚC" : "HIỆN TẠI"
+      }</div>
+      <div class="meeting-title-1 ${
+        currentMeeting.isEnded ? "ended-meeting" : ""
+      }">
+        ${currentMeeting.content || "Không có thông tin"}
+      </div>
+      <div class="meeting-time-1">
+        <div role="cell">
+          <span>Bắt đầu: ${currentMeeting.startTime}</span>
+          <span> - Kết thúc: ${currentMeeting.endTime}</span>
+        </div>
+      </div>
+      <div class="purpose">MỤC ĐÍCH SỬ DỤNG</div>
+      <div class="purpose-value">${
+        currentMeeting.purpose || "Chưa xác định"
+      }</div>
+      ${endMeetingButton}
+    </div>
+  `
+    : `
+    <div class="main-panel">
+      <h1>${roomName}</h1>
+      <div class="current-status">HIỆN TẠI</div>
+      <div class="meeting-title-1">Không có cuộc họp</div>
+      <div class="meeting-time-1">
+        <div role="cell">
+          <span>Bắt đầu: --:--</span>
+          <span> - Kết thúc: --:--</span>
+        </div>
+      </div>
+      <div class="purpose">MỤC ĐÍCH SỬ DỤNG</div>
+      <div class="purpose-value">Không có thông tin</div>
+    </div>
+  `;
 
-      // Xử lý nút bật/tắt
-      if (e.target.closest(".controls .btn:first-child")) {
-        acStates[room].isOn = !acStates[room].isOn;
-        updateACStatus(acCard, room);
-      }
-
-      // Xử lý giảm nhiệt độ
-      if (e.target.closest(".controls .btn:nth-child(3)")) {
-        if (
-          acStates[room].isOn &&
-          acStates[room].roomTemperatures > acStates[room].minTemp
-        ) {
-          acStates[room].roomTemperatures--;
-          console.log("Decrease temperature", acStates[room].roomTemperatures);
-          if (tempDisplay) {
-            tempDisplay.textContent = `${acStates[room].roomTemperatures}°C`;
-            eraWidget.triggerAction(valueAir.action, null, {
-              value: acStates[room].roomTemperatures,
-            });
-          }
-        }
-      }
-
-      // Xử lý tăng nhiệt độ
-      if (e.target.closest(".btn-up")) {
-        if (
-          acStates[room].isOn &&
-          acStates[room].roomTemperatures < acStates[room].maxTemp
-        ) {
-          acStates[room].roomTemperatures++;
-          console.log("Increase temperature", acStates[room].roomTemperatures);
-          if (tempDisplay) {
-            tempDisplay.textContent = `${acStates[room].roomTemperatures}°C`;
-            eraWidget.triggerAction(valueAir.action, null, {
-              value: acStates[room].roomTemperatures,
-            });
-          }
-        }
-      }
-    });
-  }, 0);
   const suffix = roomSuffixMap[roomKey];
   const template = `
     <div class="container">
@@ -2050,7 +1974,7 @@ function renderRoomPage(data, roomKeyword, roomName) {
                     </svg>
                   </button>
                   <span class="temperature-air" id="temperature-${roomName}">${
-    acStates[roomKey].roomTemperatures
+    acStates[roomKey]?.roomTemperatures || 20
   }°C</span>
                   <button class="btn-up">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -2074,71 +1998,30 @@ function renderRoomPage(data, roomKeyword, roomName) {
           <i class="fas fa-home"></i> TRANG CHỦ
         </button>
       </div>
-      <div class="main-panel">
-        <div>
-          <h1>${currentMeeting ? currentMeeting.room : roomName}</h1>
-          <div class="current-status">HIỆN TẠI</div>
-          <div class="meeting-title-1">${
-            currentMeeting ? currentMeeting.content : "Không có cuộc họp"
-          }</div>
-          <div class="meeting-time-1">
-            <div role="cell">
-              <span>Bắt đầu: ${
-                currentMeeting ? currentMeeting.startTime : "--:--"
-              }</span>
-              <span> - Kết thúc: ${
-                currentMeeting ? currentMeeting.endTime : "--:--"
-              }</span>
-            </div>
-          <div class="purpose">MỤC ĐÍCH SỬ DỤNG</div>
-          <div class="purpose-value">${
-            currentMeeting ? currentMeeting.purpose : "Chưa xác định"
-          }</div>
-        </div>
-        <button class="end-meeting">END MEETING</button>
-      </div>
+      
+      ${currentMeetingTemplate}
+      
       <div class="right-panel">
         <h2>LỊCH HỌP PHÒNG ${roomName.toUpperCase()}</h2>
-        ${upcomingMeetings
-          .map(
-            (meeting) => `
-          <div class="upcoming-meeting">
-            <div class="meeting-title">${meeting.content}</div>
-            <div class="meeting-time-1">${meeting.startTime} - ${meeting.endTime}</div>
-          </div>
-        `
-          )
-          .join("")}
+        ${
+          upcomingMeetings.length > 0
+            ? upcomingMeetings
+                .map(
+                  (meeting) => `
+            <div class="upcoming-meeting">
+              <div class="meeting-title">${meeting.content}</div>
+              <div class="meeting-time-1">${meeting.startTime} - ${meeting.endTime}</div>
+            </div>
+          `
+                )
+                .join("")
+            : `<div class="no-upcoming">Không có cuộc họp sắp diễn ra</div>`
+        }
       </div>
     </div>
   `;
-  // Set up continuous updates
-  setTimeout(() => {
-    console.log(`Setting up continuous updates for ${roomKey}`);
-    // Cleanup khi container bị remove
-    const container = document.getElementById(`room-${roomKey}-container`);
-    if (container) {
-      const observer = new MutationObserver((mutations) => {
-        mutations.forEach((mutation) => {
-          if (mutation.removedNodes.length > 0) {
-            clearInterval(roomUpdateIntervals[roomKey]);
-            delete roomUpdateIntervals[roomKey];
-            observer.disconnect();
-            console.log(`Cleaned up updates for ${roomKey}`);
-          }
-        });
-      });
-
-      observer.observe(container.parentNode, {
-        childList: true,
-        subtree: true,
-      });
-    }
-  }, 0);
-
   return template;
 }
-
 // Hàm chính để load trang động
 async function loadDynamicPage(pageType) {
   console.log("Loading dynamic page for:", pageType);
@@ -2234,29 +2117,25 @@ function setupEndMeetingHandlers() {
     dynamicContent.removeEventListener("click", oldHandler);
   }
 
-  // Tạo handler mới
-  const newHandler = function (event) {
-    if (event.target.classList.contains("end-meeting")) {
-      handleEndMeeting(event);
-    }
-  };
-
   // Lưu và thêm handler mới
   dynamicContent._endMeetingHandler = newHandler;
   dynamicContent.addEventListener("click", newHandler);
 }
-// Thêm hàm kiểm tra trạng thái kết thúc của cuộc họp
 function isValidMeetingState(meeting, currentTime) {
   if (!meeting) return false;
-
-  // Nếu cuộc họp đã được đánh dấu kết thúc, luôn trả về false
   if (meeting.isEnded) return false;
 
-  // Kiểm tra thời gian hiện tại có nằm trong khoảng thời gian họp hay không
-  const isTimeValid =
-    currentTime >= meeting.startTime && currentTime <= meeting.endTime;
+  // Chuyển đổi thời gian thành phút để so sánh
+  const toMinutes = (time) => {
+    const [hours, minutes] = time.split(":").map(Number);
+    return hours * 60 + minutes;
+  };
 
-  return isTimeValid;
+  const currentMinutes = toMinutes(currentTime);
+  const startMinutes = toMinutes(meeting.startTime);
+  const endMinutes = toMinutes(meeting.endTime);
+
+  return currentMinutes >= startMinutes && currentMinutes <= endMinutes;
 }
 
 async function readFromFirebase(dateKey) {
@@ -2334,8 +2213,11 @@ async function writeToFirebase(data) {
   }
 }
 
-function handleEndMeeting(event) {
-  // Hiển thị hộp thoại xác nhận
+async function handleEndMeeting(event) {
+  const dynamicContent = document.getElementById("dynamicPageContent");
+  const roomName = dynamicContent.querySelector(".main-panel h1").textContent;
+  console.log("Ending meeting for room:", roomName);
+
   const cachedData = JSON.parse(localStorage.getItem("fileCache"));
   if (!cachedData || !cachedData.data) {
     console.error("No meeting data found!");
@@ -2345,93 +2227,71 @@ function handleEndMeeting(event) {
   const data = cachedData.data;
   const currentTime = getCurrentTime();
   const currentDate = getCurrentDate();
-  const roomName = event.target
-    .closest(".main-panel")
-    .querySelector("h1").textContent;
+
+  // Chuẩn hóa tên phòng để so sánh
+  const normalizeForComparison = (name) =>
+    name.toLowerCase().replace("phòng", "").replace("p.", "").trim();
+
+  const currentRoomNormalized = normalizeForComparison(roomName);
 
   // Tìm cuộc họp hiện tại
-  const roomMeetings = data.filter(
-    (meeting) =>
-      meeting.room.toLowerCase().replace(/\s+/g, "-") &&
-      meeting.date === currentDate
-  );
-
-  const currentMeeting = roomMeetings.find((meeting) =>
-    isValidMeetingState(meeting, currentTime)
-  );
-
-  if (currentMeeting) {
-    const updatedData = [...data];
-    const currentMeetingIndex = updatedData.findIndex(
-      (meeting) => meeting.id === currentMeeting.id
+  const currentMeeting = data.find((meeting) => {
+    const meetingRoomNormalized = normalizeForComparison(meeting.room);
+    return (
+      meetingRoomNormalized === currentRoomNormalized &&
+      meeting.date === currentDate &&
+      isValidMeetingState(meeting, currentTime)
     );
+  });
 
-    if (currentMeetingIndex !== -1) {
-      // Cập nhật thông tin cuộc họp với flag đặc biệt
-      updatedData[currentMeetingIndex] = {
-        ...currentMeeting,
+  if (!currentMeeting) {
+    alert("Không tìm thấy cuộc họp nào đang diễn ra trong phòng này");
+    return;
+  }
+
+  // Cập nhật trạng thái cuộc họp
+  const updatedData = data.map((meeting) => {
+    if (meeting.id === currentMeeting.id) {
+      return {
+        ...meeting,
         endTime: currentTime,
         isEnded: true,
         lastUpdated: new Date().getTime(),
-        originalEndTime: currentMeeting.endTime,
-        forceEndedByUser: true, // Thêm flag mới để đánh dấu cuộc họp đã được kết thúc bởi người dùng
-      };
-
-      // Cập nhật cache và localStorage
-      fileCache.data = updatedData;
-      fileCache.lastModified = new Date().getTime();
-
-      // Lọc lại các cuộc họp trong ngày
-      const today = new Date();
-      const todayMeetings = updatedData.filter((meeting) => {
-        const meetingDate = new Date(
-          meeting.date.split("/").reverse().join("-")
-        );
-        return meetingDate.toDateString() === today.toDateString();
-      });
-
-      writeToFirebase(todayMeetings);
-      // Cập nhật giao diện
-      updateRoomStatus(updatedData);
-      updateScheduleTable(todayMeetings);
-      renderRoomPage(
-        updatedData,
-        roomName.toLowerCase().replace(/\s+/g, "-"),
-        roomName.toLowerCase().replace(/\s+/g, "-")
-      );
-
-      console.log(`Meeting ended early:`, {
-        room: roomName,
-        originalEndTime: currentMeeting.endTime,
-        actualEndTime: currentTime,
-        isEnded: true,
+        originalEndTime: meeting.endTime,
         forceEndedByUser: true,
-      });
+      };
     }
-  }
-}
-
-// Đảm bảo handlers được setup khi DOM ready
-document.addEventListener("DOMContentLoaded", setupEndMeetingHandlers);
-// Thêm sự kiện cho nút "End Meeting"
-document.addEventListener("DOMContentLoaded", function () {
-  const dynamicContent = document.getElementById("dynamicPageContent");
-
-  dynamicContent.addEventListener("click", function (event) {
-    if (event.target.classList.contains("end-meeting")) {
-      handleEndMeeting(event);
-      const isConfirmed = confirm(
-        "Bạn có chắc chắn muốn kết thúc cuộc họp này không?"
-      );
-
-      // Nếu người dùng chọn "No", thoát khỏi hàm
-      if (!isConfirmed) {
-        console.log("Reject end meeting");
-        return;
-      }
-    }
+    return meeting;
   });
-});
+
+  // Cập nhật cache
+  fileCache.data = updatedData;
+  localStorage.setItem("fileCache", JSON.stringify(fileCache));
+
+  // Cập nhật Firebase
+  const today = new Date();
+  const todayMeetings = updatedData.filter((meeting) => {
+    const meetingDate = new Date(meeting.date.split("/").reverse().join("-"));
+    return meetingDate.toDateString() === today.toDateString();
+  });
+
+  await writeToFirebase(todayMeetings);
+
+  // Cập nhật giao diện
+  updateRoomStatus(updatedData);
+
+  // Render lại trang để hiển thị trạng thái mới
+  const roomKey = roomName.toLowerCase().replace(/\s+/g, "-");
+  loadDynamicPage(
+    roomKey.includes("lotus")
+      ? "room1"
+      : roomKey.includes("lavender-1")
+      ? "room2"
+      : "room3"
+  );
+
+  alert("Cuộc họp đã được kết thúc thành công!");
+}
 
 // Thêm CSS cho styling
 const style = document.createElement("style");
