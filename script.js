@@ -1105,16 +1105,16 @@ document.addEventListener("DOMContentLoaded", function () {
   const scheduleContent = document.querySelector(".schedule-content");
 
   // Thêm Font Awesome nếu chưa có
-  function addFontAwesome() {
-    if (!document.querySelector('link[href*="font-awesome"]')) {
-      const fontAwesomeLink = document.createElement("link");
-      fontAwesomeLink.rel = "stylesheet";
-      fontAwesomeLink.href =
-        "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css";
-      document.head.appendChild(fontAwesomeLink);
-    }
-  }
-  addFontAwesome();
+  // function addFontAwesome() {
+  //   if (!document.querySelector('link[href*="font-awesome"]')) {
+  //     const fontAwesomeLink = document.createElement("link");
+  //     fontAwesomeLink.rel = "stylesheet";
+  //     fontAwesomeLink.href =
+  //       "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css";
+  //     document.head.appendChild(fontAwesomeLink);
+  //   }
+  // }
+  // addFontAwesome();
 
   // Tạo modal preview
   function createPreviewModal(imageDataUrl, type) {
@@ -2066,7 +2066,6 @@ async function loadDynamicPage(pageType) {
 
     // Render trang
     dynamicContent.innerHTML = renderRoomPage(data, roomKeyword, roomName);
-
     // Cập nhật đồng hồ
     const currentTimeElement = document.getElementById("currentTime-1");
     const currentDateElement = document.getElementById("currentDate-1");
@@ -2105,7 +2104,6 @@ async function loadDynamicPage(pageType) {
     console.error("Error loading dynamic page:", error);
   }
 }
-
 //======================End Meeting Feature==================
 function setupEndMeetingHandlers() {
   const dynamicContent = document.getElementById("dynamicPageContent");
@@ -2394,6 +2392,19 @@ eraWidget.init({
 
     configPeopleDetection2 = configuration.realtime_configs[16];
     configPeopleDetection3 = configuration.realtime_configs[17];
+
+    actionOn1 = configuration.actions[0]; // Lưu cấu hình hành động : On
+    actionOff1 = configuration.actions[1]; // Lưu cấu hình hành động : Off
+
+    actionOn2 = configuration.actions[2]; // Lưu cấu hình hành động : On
+    actionOff2 = configuration.actions[3]; // Lưu cấu hình hành động : Off
+
+    actionOn3 = configuration.actions[4]; // Lưu cấu hình hành động : On
+    actionOff3 = configuration.actions[5]; // Lưu cấu hình hành động : Off
+
+    valueAir1 = configuration.actions[6];
+    valueAir2 = configuration.actions[7];
+    valueAir3 = configuration.actions[8];
   },
   // Hàm lấy giá trị từ các ID và cập nhật giao diện
   onValues: (values) => {
@@ -2522,10 +2533,10 @@ eraWidget.init({
       roomTemperatures.lotus = parseFloat(airValue);
       TemperatureManager.updateDisplay("lotus", airValue);
     }
-    if (configAirConditioner2 && values[configAirConditioner2.id]) {
-      const airValue2 = values[configAirConditioner2.id].value;
-      roomTemperatures["lavender-1"] = parseFloat(airValue2);
-      TemperatureManager.updateDisplay("lavender-1", airValue2);
+    if (configAirConditioner && values[configAirConditioner.id]) {
+      const airValue = values[configAirConditioner.id].value;
+      roomTemperatures.lotus = parseFloat(airValue);
+      TemperatureManager.updateDisplay("lotus", airValue);
     }
 
     if (configAirConditioner3 && values[configAirConditioner3.id]) {
@@ -2590,7 +2601,6 @@ function startTemperatureMonitoring() {
 // Initialize the monitoring when the page loads
 document.addEventListener("DOMContentLoaded", startTemperatureMonitoring);
 //=================Air Conditioner =================
-// Hàm cập nhật trạng thái điều hòa
 let updateIntervals = {};
 
 function updateACStatus(container, room) {
@@ -2601,7 +2611,7 @@ function updateACStatus(container, room) {
   // Get all UI elements
   const statusDot = container.querySelector(".status-air-dot");
   const statusText = container.querySelector(".status-air span");
-  const powerButton = container.querySelector(".controls .btn");
+  const powerButton = container.querySelectorAll(".controls .btn");
   const tempDisplay = container.querySelector(".temperature-air");
 
   // Create status monitor function
@@ -2816,7 +2826,7 @@ const PeopleDetectionSystem = {
       statusText.textContent = isEmpty ? "Phòng trống" : "Có người";
 
       // Update dot color
-      dot.style.backgroundColor = isEmpty ? "#ff0000" : "#4CAF50";
+      dot.style.backgroundColor = isEmpty ? "#4CAF50" : "#ff0000";
 
       // Add animation
       dot.classList.remove("status-update");
