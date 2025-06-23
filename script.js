@@ -1795,11 +1795,21 @@ function getRoomPowerStats(roomSuffix) {
   };
 }
 let roomUpdateIntervals = {};
+let acActions = {
+  lotus: { on: null, off: null },
+  "lavender-1": { on: null, off: null },
+  "lavender-2": { on: null, off: null },
+};
 // Hàm render trang động riêng biệt
 function renderRoomPage(data, roomKeyword, roomName) {
   console.log("Rendering room page for:", roomName);
   console.log("Data received:", data);
 
+  const valueAirMap = {
+    lotus: valueAir1,
+    "lavender-1": valueAir2,
+    "lavender-2": valueAir3,
+  };
   // Chuẩn hóa tên phòng để so sánh
   const normalizeRoomForComparison = (name) =>
     name.toLowerCase().replace("phòng", "").replace("p.", "").trim();
@@ -1839,7 +1849,23 @@ function renderRoomPage(data, roomKeyword, roomName) {
     2,
     "0"
   )}:${String(currentTime.getMinutes()).padStart(2, "0")}`;
-
+  if (!acStates[roomKey]) {
+    console.log(`Initializing new state for room ${roomKey}`);
+    acStates[roomKey] = {
+      isOn: false,
+      roomTemperatures: 20,
+      minTemp: 16,
+      maxTemp: 30,
+      current: powerStats.current,
+      power: powerStats.power,
+    };
+  } else {
+    console.log(`Updating existing state for room ${roomKey}`);
+    console.log("Previous state:", acStates[roomKey]);
+    acStates[roomKey].current = powerStats.current;
+    acStates[roomKey].power = powerStats.power;
+    console.log("Updated state:", acStates[roomKey]);
+  }
   // Tìm cuộc họp đang diễn ra hoặc sắp diễn ra
   let currentMeeting = null;
   let upcomingMeetings = [];
@@ -1868,6 +1894,100 @@ function renderRoomPage(data, roomKeyword, roomName) {
     const timeB = b.startTime.split(":").map(Number);
     return timeA[0] * 60 + timeA[1] - (timeB[0] * 60 + timeB[1]);
   });
+
+  setTimeout(() => {
+    const container = document.querySelector(".container");
+    if (!container) return;
+
+    // Find AC card for this room
+    const acCard = container.querySelector(
+      `.ac-card[data-room="${roomName.toLowerCase()}"]`
+    );
+    if (acCard) {
+      // Start monitoring AC status
+      updateACStatus(acCard, roomKeyword);
+    }
+
+    container.addEventListener("click", (e) => {
+      const acCard = e.target.closest(".ac-card");
+      if (!acCard) return;
+      const room = acCard.dataset.room.toLowerCase(); // Lấy tên phòng từ data-room
+      const valueAir = valueAirMap[room];
+      if (!valueAir) {
+        console.error(`Không tìm thấy valueAir cho phòng: ${room}`);
+        return;
+      }
+
+      // Kiểm tra và khởi tạo acStates nếu chưa có phòng này
+      if (!acStates[room]) {
+        acStates[room] = {
+          isOn: false,
+          roomTemperatures: 20,
+          minTemp: 16,
+          maxTemp: 30,
+        };
+      }
+
+      // Chọn phần tử hiển thị nhiệt độ
+      const tempDisplay = acCard.querySelector(".temperature-air");
+
+      // Xử lý nút bật/tắt
+      if (e.target.closest(".controls .btn")) {
+        const roomKey = room.toLowerCase().trim();
+        const isOn = acStates[roomKey].isOn;
+
+        // Xác định action cần kích hoạt
+        const action = isOn ? acActions[roomKey].off : acActions[roomKey].on;
+
+        // Kích hoạt action thông qua ERA Widget
+        if (action) {
+          eraWidget.triggerAction(action);
+
+          // Cập nhật trạng thái cục bộ
+          acStates[roomKey].isOn = !isOn;
+          updateACStatus(acCard, roomKey);
+
+          console.log(`AC ${roomKey} turned ${isOn ? "OFF" : "ON"}`);
+        } else {
+          console.error(`Action not configured for room: ${roomKey}`);
+        }
+      }
+
+      // Xử lý giảm nhiệt độ
+      if (e.target.closest(".controls .btn:nth-child(3)")) {
+        if (
+          acStates[room].isOn &&
+          acStates[room].roomTemperatures > acStates[room].minTemp
+        ) {
+          acStates[room].roomTemperatures--;
+          console.log("Decrease temperature", acStates[room].roomTemperatures);
+          if (tempDisplay) {
+            tempDisplay.textContent = `${acStates[room].roomTemperatures}°C`;
+            eraWidget.triggerAction(valueAir.action, null, {
+              value: acStates[room].roomTemperatures,
+            });
+          }
+        }
+      }
+
+      // Xử lý tăng nhiệt độ
+      if (e.target.closest(".btn-up")) {
+        if (
+          acStates[room].isOn &&
+          acStates[room].roomTemperatures < acStates[room].maxTemp
+        ) {
+          acStates[room].roomTemperatures++;
+          console.log("Increase temperature", acStates[room].roomTemperatures);
+          if (tempDisplay) {
+            tempDisplay.textContent = `${acStates[room].roomTemperatures}°C`;
+            eraWidget.triggerAction(valueAir.action, null, {
+              value: acStates[room].roomTemperatures,
+            });
+          }
+        }
+      }
+    });
+  }, 0);
 
   // Tạo nút End Meeting nếu có cuộc họp đang diễn ra
   const endMeetingButton =
@@ -2393,14 +2513,14 @@ eraWidget.init({
     configPeopleDetection2 = configuration.realtime_configs[16];
     configPeopleDetection3 = configuration.realtime_configs[17];
 
-    actionOn1 = configuration.actions[0]; // Lưu cấu hình hành động : On
-    actionOff1 = configuration.actions[1]; // Lưu cấu hình hành động : Off
+    acActions.lotus.on = configuration.actions[0];
+    acActions.lotus.off = configuration.actions[1];
 
-    actionOn2 = configuration.actions[2]; // Lưu cấu hình hành động : On
-    actionOff2 = configuration.actions[3]; // Lưu cấu hình hành động : Off
+    acActions["lavender-1"].on = configuration.actions[2];
+    acActions["lavender-1"].off = configuration.actions[3];
 
-    actionOn3 = configuration.actions[4]; // Lưu cấu hình hành động : On
-    actionOff3 = configuration.actions[5]; // Lưu cấu hình hành động : Off
+    acActions["lavender-2"].on = configuration.actions[4];
+    acActions["lavender-2"].off = configuration.actions[5];
 
     valueAir1 = configuration.actions[6];
     valueAir2 = configuration.actions[7];
@@ -2611,7 +2731,7 @@ function updateACStatus(container, room) {
   // Get all UI elements
   const statusDot = container.querySelector(".status-air-dot");
   const statusText = container.querySelector(".status-air span");
-  const powerButton = container.querySelectorAll(".controls .btn");
+  const powerButton = container.querySelector(".controls .btn");
   const tempDisplay = container.querySelector(".temperature-air");
 
   // Create status monitor function
@@ -2621,23 +2741,6 @@ function updateACStatus(container, room) {
 
     // Update AC state and UI
     acStates[roomKey].isOn = isRunning;
-
-    if (isRunning) {
-      statusDot.style.backgroundColor = "#4CAF50";
-      statusText.textContent = "Online";
-      powerButton.classList.add("active");
-
-      // Update temperature if available
-      if (roomTemperatures[roomKey]) {
-        tempDisplay.textContent = `${Math.round(roomTemperatures[roomKey])}°C`;
-      }
-    } else {
-      statusDot.style.backgroundColor = "#ff0000";
-      statusText.textContent = "Offline";
-      powerButton.classList.remove("active");
-      tempDisplay.textContent = "OFF";
-    }
-
     console.log(
       `AC Status updated for ${room}: ${isRunning ? "Running" : "Stopped"}`
     );
