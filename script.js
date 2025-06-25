@@ -2791,10 +2791,7 @@ function updateACStatus(container, room) {
 
       // Priority logic: Use power consumption as primary indicator
       // but also consider software state for immediate feedback
-      const isActuallyRunning =
-        isPowerOn ||
-        (isLogicallyOn &&
-          Date.now() - (acStates[roomKey].lastToggle || 0) < 5000);
+      const isActuallyRunning = isLogicallyOn || isPowerOn;
 
       // Update internal state
       acStates[roomKey].isOn = isActuallyRunning;
@@ -2824,8 +2821,7 @@ function updateACStatus(container, room) {
       // Update temperature display
       if (tempDisplay) {
         if (isActuallyRunning) {
-          // Get temperature from sensor or default
-          const currentTemp = getRoomTemperature(roomKey) || "25";
+          const currentTemp = acStates[roomKey]?.roomTemperatures || 25;
           tempDisplay.textContent = `${currentTemp}°C`;
         } else {
           tempDisplay.textContent = "OFF";
