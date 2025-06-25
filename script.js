@@ -1932,25 +1932,61 @@ function renderRoomPage(data, roomKeyword, roomName) {
       const tempDisplay = acCard.querySelector(".temperature-air");
 
       // Xử lý nút bật/tắt
-      if (e.target.closest(".controls .btn")) {
-        const roomKey = room.toLowerCase().trim();
-        const isOn = acStates[roomKey].isOn;
+      if (e.target.closest(".controls .btn:first-child")) {
+        console.log("Press button to toggle AC state");
 
-        // Xác định action cần kích hoạt
-        const action = isOn ? acActions[roomKey].off : acActions[roomKey].on;
+        // Debug: Log trạng thái hiện tại trước khi toggle
+        console.log(`[DEBUG] Current state for ${room}:`, acStates[room]);
+        console.log(`[DEBUG] Available actions for ${room}:`, acActions[room]);
 
-        // Kích hoạt action thông qua ERA Widget
-        if (action) {
-          eraWidget.triggerAction(action);
+        // Toggle trạng thái AC của phòng
+        acStates[room].isOn = !acStates[room].isOn;
 
-          // Cập nhật trạng thái cục bộ
-          acStates[roomKey].isOn = !isOn;
-          updateACStatus(acCard, roomKey);
+        // Lấy action tương ứng với phòng và trạng thái
+        const selectedAction = acStates[room].isOn
+          ? acActions[room].on
+          : acActions[room].off;
 
-          console.log(`AC ${roomKey} turned ${isOn ? "OFF" : "ON"}`);
-        } else {
-          console.error(`Action not configured for room: ${roomKey}`);
+        // Debug: Log action được chọn
+        console.log(`[DEBUG] Selected action:`, selectedAction);
+        console.log(`[DEBUG] Action to trigger:`, selectedAction?.action);
+
+        // Validate action trước khi trigger
+        if (!selectedAction || !selectedAction.action) {
+          console.error(
+            `[ERROR] Invalid action for room ${room}, state: ${
+              acStates[room].isOn ? "ON" : "OFF"
+            }`
+          );
+          // Revert state nếu action không hợp lệ
+          acStates[room].isOn = !acStates[room].isOn;
+          return;
         }
+
+        // Trigger action với .action syntax
+        try {
+          eraWidget.triggerAction(selectedAction.action, null);
+          console.log(
+            `[SUCCESS] Triggered action for ${room}: ${
+              acStates[room].isOn ? "ON" : "OFF"
+            }`
+          );
+
+          // Cập nhật UI sau khi trigger thành công
+          updateACStatus(acCard, room);
+        } catch (error) {
+          console.error(`[ERROR] Failed to trigger action:`, error);
+          // Revert state nếu trigger failed
+          acStates[room].isOn = !acStates[room].isOn;
+          updateACStatus(acCard, room);
+        }
+
+        // Final debug log
+        console.log(
+          `[FINAL] Room: ${room}, Final AC State: ${
+            acStates[room].isOn ? "ON" : "OFF"
+          }`
+        );
       }
 
       // Xử lý giảm nhiệt độ
@@ -2082,7 +2118,7 @@ function renderRoomPage(data, roomKeyword, roomName) {
                 <h3 class="title">Máy lạnh ${roomName}</h3>
 
                 <div class="controls">
-                  <button class="btn">
+                  <button class="btn btnActive_Power">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                       <path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10" stroke-width="2" />
                     </svg>
@@ -2734,23 +2770,89 @@ function updateACStatus(container, room) {
   const powerButton = container.querySelector(".controls .btn");
   const tempDisplay = container.querySelector(".temperature-air");
 
+  // Debug: Log UI elements
+  console.log(`[DEBUG] UI Elements for ${room}:`, {
+    statusDot: !!statusDot,
+    statusText: !!statusText,
+    powerButton: !!powerButton,
+    tempDisplay: !!tempDisplay,
+  });
+
   // Create status monitor function
   const updateStatusIndicators = () => {
-    // Check power consumption to determine actual AC state
-    const isRunning = powerStats.current > 0.5;
+    try {
+      // Get current power consumption
+      const currentPower = powerStats?.current || 0;
+      console.log(`[DEBUG] Power consumption for ${room}: ${currentPower}W`);
 
-    // Update AC state and UI
-    acStates[roomKey].isOn = isRunning;
-    console.log(
-      `AC Status updated for ${room}: ${isRunning ? "Running" : "Stopped"}`
-    );
+      // Determine AC state based on multiple factors
+      const isPowerOn = currentPower > 0.5; // Hardware is consuming power
+      const isLogicallyOn = acStates[roomKey]?.isOn || false; // Software state
+
+      // Priority logic: Use power consumption as primary indicator
+      // but also consider software state for immediate feedback
+      const isActuallyRunning =
+        isPowerOn ||
+        (isLogicallyOn &&
+          Date.now() - (acStates[roomKey].lastToggle || 0) < 5000);
+
+      // Update internal state
+      acStates[roomKey].isOn = isActuallyRunning;
+      acStates[roomKey].powerConsumption = currentPower;
+
+      // Update UI elements with null checks
+      if (statusDot && statusText) {
+        if (isActuallyRunning) {
+          statusDot.style.backgroundColor = "#4CAF50";
+          statusText.textContent = "Online";
+        } else {
+          statusDot.style.backgroundColor = "#ff0000";
+          statusText.textContent = "Offline";
+        }
+      }
+
+      if (powerButton) {
+        if (isActuallyRunning) {
+          powerButton.classList.add("active");
+          powerButton.style.backgroundColor = "#4CAF50";
+        } else {
+          powerButton.classList.remove("active");
+          powerButton.style.backgroundColor = "#6c757d";
+        }
+      }
+
+      // Update temperature display
+      if (tempDisplay) {
+        if (isActuallyRunning) {
+          // Get temperature from sensor or default
+          const currentTemp = getRoomTemperature(roomKey) || "25";
+          tempDisplay.textContent = `${currentTemp}°C`;
+        } else {
+          tempDisplay.textContent = "OFF";
+        }
+      }
+
+      console.log(
+        `[STATUS] AC ${room}: ${
+          isActuallyRunning ? "ON" : "OFF"
+        } | Power: ${currentPower}W`
+      );
+    } catch (error) {
+      console.error(`[ERROR] Failed to update status for ${room}:`, error);
+    }
   };
 
   // Initial update
   updateStatusIndicators();
 
-  // Set up continuous monitoring
-  const monitoringInterval = setInterval(updateStatusIndicators, 1000);
+  // Set up continuous monitoring with error handling
+  const monitoringInterval = setInterval(() => {
+    try {
+      updateStatusIndicators();
+    } catch (error) {
+      console.error(`[ERROR] Monitoring error for ${room}:`, error);
+    }
+  }, 2000); // Reduce frequency to 2 seconds for better performance
 
   // Clean up when container is removed
   const observer = new MutationObserver((mutations) => {
@@ -2758,7 +2860,7 @@ function updateACStatus(container, room) {
       if ([...mutation.removedNodes].includes(container)) {
         clearInterval(monitoringInterval);
         observer.disconnect();
-        console.log(`Monitoring stopped for ${room}`);
+        console.log(`[CLEANUP] Monitoring stopped for ${room}`);
       }
     });
   });
@@ -2766,6 +2868,22 @@ function updateACStatus(container, room) {
   observer.observe(container.parentNode, { childList: true });
 
   return monitoringInterval;
+}
+
+// Helper function to get room temperature
+function getRoomTemperature(roomKey) {
+  try {
+    // Replace this with your actual temperature reading logic
+    // This could be from sensors, era data, or other sources
+    const eraSuffix = roomEraMap[roomKey];
+    // Example: return eraWidget.getTemperature(eraSuffix);
+
+    // For now, return mock temperature
+    return Math.floor(Math.random() * 5) + 23; // 23-27°C
+  } catch (error) {
+    console.error(`Failed to get temperature for ${roomKey}:`, error);
+    return null;
+  }
 }
 
 // Update updatePeopleStatus function
