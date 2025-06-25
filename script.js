@@ -496,6 +496,7 @@ function hideProgressBar() {
 // Event listener for the upload button
 document.addEventListener("DOMContentLoaded", function () {
   const uploadButton = document.querySelector(".upload-button");
+  initializeACTemperatures();
   showProgressBar();
   uploadButton.addEventListener("click", async function (event) {
     event.preventDefault();
@@ -771,11 +772,11 @@ setInterval(updateDate, 1000);
 // Hiển thị ngày ngay khi tải trang
 updateDate();
 
-// Khởi tạo đồng hồ và cập nhật mỗi giây
 function initClock() {
-  updateClock(); // Cập nhật ngay lập tức
-  setInterval(updateClock, 1000); // Cập nhật mỗi giây
+  updateClock();
+  setInterval(updateClock, 1000);
 }
+
 // Hàm kiểm tra xung đột thời gian giữa các cuộc họp
 function checkTimeConflict(meeting1, meeting2) {
   const start1 = timeToMinutes(meeting1.startTime);
@@ -2119,7 +2120,7 @@ function renderRoomPage(data, roomKeyword, roomName) {
 
                 <div class="controls">
                   <button class="btn btnActive_Power">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="white">
                       <path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10" stroke-width="2" />
                     </svg>
                   </button>
@@ -2561,6 +2562,7 @@ eraWidget.init({
     valueAir1 = configuration.actions[6];
     valueAir2 = configuration.actions[7];
     valueAir3 = configuration.actions[8];
+    setTimeout(initializeACTemperatures, 500);
   },
   // Hàm lấy giá trị từ các ID và cập nhật giao diện
   onValues: (values) => {
@@ -2687,18 +2689,15 @@ eraWidget.init({
     if (configAirConditioner && values[configAirConditioner.id]) {
       const airValue = values[configAirConditioner.id].value;
       roomTemperatures.lotus = parseFloat(airValue);
-      TemperatureManager.updateDisplay("lotus", airValue);
     }
     if (configAirConditioner && values[configAirConditioner.id]) {
       const airValue = values[configAirConditioner.id].value;
       roomTemperatures.lotus = parseFloat(airValue);
-      TemperatureManager.updateDisplay("lotus", airValue);
     }
 
     if (configAirConditioner3 && values[configAirConditioner3.id]) {
       const airValue3 = values[configAirConditioner3.id].value;
       roomTemperatures["lavender-2"] = parseFloat(airValue3);
-      TemperatureManager.updateDisplay("lavender-2", airValue3);
     }
 
     if (configPeopleDetection1 && values[configPeopleDetection1.id]) {
@@ -2744,18 +2743,27 @@ eraWidget.init({
     return latestValues;
   },
 });
-// Function to start temperature monitoring
-function startTemperatureMonitoring() {
-  if (!window.roomTemperatures) {
-    window.roomTemperatures = {
-      lotus: 20,
-      "lavender-1": 20,
-      "lavender-2": 20,
-    };
-  }
+
+function initializeACTemperatures() {
+  if (!configAirConditioner || !latestValues[configAirConditioner.id]) return;
+
+  const temperatures = {
+    lotus: latestValues[configAirConditioner.id].value,
+    "lavender-1": latestValues[configAirConditioner2?.id]?.value || 20,
+    "lavender-2": latestValues[configAirConditioner3?.id]?.value || 20,
+  };
+
+  Object.keys(temperatures).forEach((room) => {
+    if (acStates[room]) {
+      acStates[room].roomTemperatures = temperatures[room];
+      const tempDisplay = document.querySelector(
+        `[data-room="${room}"] .temperature-air`
+      );
+      if (tempDisplay) tempDisplay.textContent = `${temperatures[room]}°C`;
+    }
+  });
 }
-// Initialize the monitoring when the page loads
-document.addEventListener("DOMContentLoaded", startTemperatureMonitoring);
+
 //=================Air Conditioner =================
 let updateIntervals = {};
 
@@ -2865,7 +2873,6 @@ function updateACStatus(container, room) {
 
   return monitoringInterval;
 }
-
 // Helper function to get room temperature
 function getRoomTemperature(roomKey) {
   try {
