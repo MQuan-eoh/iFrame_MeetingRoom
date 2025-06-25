@@ -556,6 +556,16 @@ document
 async function handleFileUpload(file) {
   const progressContainer = document.getElementById("progressContainer");
   const progressStatus = document.getElementById("progressStatus");
+  if (window.showOpenFilePicker) {
+    try {
+      // File handle code here
+    } catch (error) {
+      console.error("Không thể lấy file handle:", error);
+      fileHandle = null;
+    }
+  } else {
+    fileHandle = null;
+  }
 
   try {
     updateProgress(10, "Đang khởi tạo...");
@@ -576,8 +586,8 @@ async function handleFileUpload(file) {
         ],
       });
       fileHandle = handles[0];
-      const initialFile = await fileHandle.getFile();
-      lastFileData = await initialFile.text();
+
+      lastFileData = await file.text();
     } catch (error) {
       console.error("Không thể lấy file handle:", error);
     }
@@ -636,13 +646,13 @@ async function handleFileUpload(file) {
     fileCache.data = mergedData;
     fileCache.lastModified = new Date().getTime();
 
-    // localStorage.setItem(
-    //   "fileCache",
-    //   JSON.stringify({
-    //     data: fileCache.data,
-    //     lastModified: fileCache.lastModified,
-    //   })
-    // );
+    localStorage.setItem(
+      "fileCache",
+      JSON.stringify({
+        data: fileCache.data,
+        lastModified: fileCache.lastModified,
+      })
+    );
     updateProgress(90, "Đang thiết lập giám sát...");
     if (fileHandle) {
       if (window.fileCheckInterval) {
@@ -1458,7 +1468,16 @@ function logMeetingData(meetings, source) {
 
 // Hàm kiểm tra thay đổi từ input element
 async function checkFileChanges() {
-  if (!fileHandle) return;
+  if (!fileHandle) {
+    const today = new Date();
+    const dateKey = `${padZero(today.getDate())}-${padZero(
+      today.getMonth() + 1
+    )}-${today.getFullYear()}`;
+    const todayMeetings = await readFromFirebase(dateKey);
+    updateScheduleTable(todayMeetings);
+    updateRoomStatus(todayMeetings);
+    return;
+  }
 
   try {
     const file = await fileHandle.getFile();
@@ -1470,10 +1489,6 @@ async function checkFileChanges() {
     }
 
     // Lấy dữ liệu từ cache
-    // const existingCache = JSON.parse(localStorage.getItem("fileCache")) || {
-    //   data: [],
-    // };
-
     const today = new Date();
     const dateStr = `${padZero(today.getDate())}/${padZero(
       today.getMonth() + 1
@@ -1813,7 +1828,13 @@ function renderRoomPage(data, roomKeyword, roomName) {
   };
   // Chuẩn hóa tên phòng để so sánh
   const normalizeRoomForComparison = (name) =>
-    name.toLowerCase().replace("phòng", "").replace("p.", "").trim();
+    name
+      .toLowerCase()
+      .replace("phòng", "")
+      .replace("p.", "")
+      .replace(/\s+/g, "") // Xóa tất cả khoảng trắng
+      .replace(/-/g, "") // Xóa dấu gạch ngang
+      .trim();
 
   const targetRoomNormalized = normalizeRoomForComparison(roomName);
 
@@ -2276,13 +2297,17 @@ function setupEndMeetingHandlers() {
   dynamicContent._endMeetingHandler = newHandler;
   dynamicContent.addEventListener("click", newHandler);
 }
+
 function isValidMeetingState(meeting, currentTime) {
   if (!meeting) return false;
   if (meeting.isEnded) return false;
 
-  // Chuyển đổi thời gian thành phút để so sánh
-  const toMinutes = (time) => {
-    const [hours, minutes] = time.split(":").map(Number);
+  // Hàm chuyển đổi thời gian thành phút (xử lý cả HH:mm và HH:mm:ss)
+  const toMinutes = (timeStr) => {
+    if (!timeStr) return 0;
+    const parts = timeStr.split(":");
+    const hours = parseInt(parts[0]) || 0;
+    const minutes = parseInt(parts[1]) || 0;
     return hours * 60 + minutes;
   };
 
@@ -2385,7 +2410,12 @@ async function handleEndMeeting(event) {
 
   // Chuẩn hóa tên phòng để so sánh
   const normalizeForComparison = (name) =>
-    name.toLowerCase().replace("phòng", "").replace("p.", "").trim();
+    name
+      .toLowerCase()
+      .replace("phòng", "")
+      .replace("p.", "")
+      .replace(/\s+/g, "")
+      .trim();
 
   const currentRoomNormalized = normalizeForComparison(roomName);
 
@@ -2446,6 +2476,17 @@ async function handleEndMeeting(event) {
   );
 
   alert("Cuộc họp đã được kết thúc thành công!");
+  console.log(
+    "All meetings:",
+    data.map((m) => ({
+      room: m.room,
+      normalized: normalizeForComparison(m.room),
+      date: m.date,
+      start: m.startTime,
+      end: m.endTime,
+      isValid: isValidMeetingState(m, currentTime),
+    }))
+  );
 }
 
 // Thêm CSS cho styling
