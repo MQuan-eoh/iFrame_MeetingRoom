@@ -1799,7 +1799,7 @@ let action = {
     actionOn2: false,
     actionOff2: false,
   },
-  "lavender-1": {
+  "lavender-2": {
     actionOn3: false,
     actionOff3: false,
   },
@@ -1944,16 +1944,6 @@ function renderRoomPage(data, roomKeyword, roomName) {
     acStates[roomKey].current = powerStats.current;
     acStates[roomKey].power = powerStats.power;
     console.log("Updated state:", acStates[roomKey]);
-  }
-
-  // Lấy valueAir cho phòng hiện tại
-  const valueAir = valueAirMap[roomKey];
-  if (valueAir) {
-    // Gán các hành động bật/tắt vào acActions
-    acActions[roomKey].on = valueAir.on;
-    acActions[roomKey].off = valueAir.off;
-  } else {
-    console.warn(`valueAir not found for roomKey: ${roomKey}`);
   }
 
   // Tìm cuộc họp đang diễn ra hoặc sắp diễn ra
