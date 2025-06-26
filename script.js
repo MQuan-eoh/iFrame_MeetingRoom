@@ -446,16 +446,19 @@ function updateScheduleTable(data) {
     updateProgress(70, "Đang cập nhật dữ liệu...");
     console.log("Đang cập nhật dữ liệu với processing bar");
     row.innerHTML = `
-            <div role="cell">${meeting.id}</div>
-            <div role="cell">${meeting.date}</div>
-            <div role="cell">${meeting.dayOfWeek}</div>
-            <div role="cell">${meeting.room}</div>
-            <div role="cell">${meeting.startTime}</div>
-            <div role="cell">${meeting.endTime}</div>
-            <div role="cell">${meeting.duration}</div>
-            <div role="cell">${meeting.purpose}</div>
-            <div role="cell">${meeting.content}</div>
-        `;
+    <div role="cell">${meeting.id}</div>
+    <div role="cell">${meeting.date}</div>
+    <div role="cell">${meeting.dayOfWeek}</div>
+    <div role="cell">${meeting.room}</div>
+    <div role="cell">${meeting.startTime}</div>
+    <!-- Hiển thị endTime mới nếu đã kết thúc -->
+    <div role="cell" class="${meeting.isEnded ? "ended-meeting" : ""}">
+      ${meeting.isEnded ? meeting.endTime : meeting.endTime}
+    </div>
+    <div role="cell">${meeting.duration}</div>
+    <div role="cell">${meeting.purpose}</div>
+    <div role="cell">${meeting.content}</div>
+  `;
     tableBody.appendChild(row);
     updateProgress(100, "Cập nhật thành công");
     console.log("Đồng bộ hóa dữ liệu thành công ! ");
@@ -1321,15 +1324,33 @@ function isTimeOverdue(endTime, currentTime) {
 
 //=====Hàm để tự động cập nhật thời gian và trạng thái - Function related times, overdueTime=======
 function startAutoUpdate(data) {
-  updateRoomStatus(data);
+  //Add function to merge with ended meetings
+  const mergeWithEndedMeetings = (meetings) => {
+    const endedMeetings =
+      JSON.parse(localStorage.getItem("endedMeetings")) || [];
+    return meetings.map((meeting) => {
+      const endedMeeting = endedMeetings.find(
+        (e) =>
+          e.id === meeting.id &&
+          e.room === meeting.room &&
+          e.date === meeting.date
+      );
+      return endedMeeting ? { ...meeting, ...endedMeeting } : meeting;
+    });
+  };
+
+  // Cập nhật lần đầu với dữ liệu đã merge
+  const mergedData = mergeWithEndedMeetings(data);
+  updateRoomStatus(mergedData);
+
   const intervalId = setInterval(() => {
     const currentTime = getCurrentTime();
-    // Chỉ cập nhật khi thay đổi phút
     if (currentTime.endsWith(":00")) {
-      console.log("Auto updating at:", currentTime);
-      updateRoomStatus(data);
+      // Lấy dữ liệu mới nhất và merge
+      const updatedData = mergeWithEndedMeetings(data);
+      updateRoomStatus(updatedData);
     }
-  }, 1000); // Vẫn kiểm tra mỗi giây nhưng chỉ cập nhật khi đổi phút
+  }, 1000);
 
   window.autoUpdateInterval = intervalId;
   return () => clearInterval(intervalId);
@@ -1411,6 +1432,12 @@ function updateSingleRoomStatus(roomCode, meetings, currentTime) {
       statusIndicator.textContent = "Trống";
       indicatorDot.classList.remove("busy");
       indicatorDot.classList.add("available");
+    }
+    if (activeMeeting && activeMeeting.isEnded) {
+      titleElement.innerHTML = `<span>Thông tin cuộc họp:</span> ĐÃ KẾT THÚC`;
+      statusIndicator.textContent = "Đã kết thúc";
+      indicatorDot.classList.remove("busy");
+      indicatorDot.classList.add("ended");
     }
   }
 }
@@ -2434,7 +2461,19 @@ async function handleEndMeeting(event) {
   });
 
   await writeToFirebase(todayMeetings);
+  const endedMeetings = JSON.parse(localStorage.getItem("endedMeetings")) || [];
+  endedMeetings.push({
+    id: currentMeeting.id,
+    room: roomName,
+    date: currentDate,
+    endTime: currentTime,
+    isEnded: true,
+  });
+  localStorage.setItem("endedMeetings", JSON.stringify(endedMeetings));
 
+  // Cập nhật UI ngay lập tức
+  updateRoomStatus(updatedData);
+  updateScheduleTable(updatedData.filter((m) => m.date === currentDate));
   // Cập nhật giao diện
   updateRoomStatus(updatedData);
 
