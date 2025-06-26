@@ -1840,7 +1840,32 @@ function normalizeRoomKey(roomName) {
   return roomName.toLowerCase().trim();
   // return roomName.toLowerCase().replace(/\s+/g, "-");
 }
+function updateACStatusUI(container, roomKey) {
+  const state = acStates[roomKey];
+  const statusDot = container.querySelector(".status-air-dot");
+  const statusText = container.querySelector(".status-air span");
+  const powerButton = container.querySelector(".controls .btn");
+  const tempDisplay = container.querySelector(".temperature-air");
 
+  if (state.isOn) {
+    statusDot.style.backgroundColor = "#4CAF50";
+    statusText.textContent = "Online";
+    powerButton.classList.add("active");
+    powerButton.style.backgroundColor = "#4CAF50";
+    tempDisplay.textContent = `${state.roomTemperatures}°C`;
+  } else {
+    statusDot.style.backgroundColor = "#ff0000";
+    statusText.textContent = "Offline";
+    powerButton.classList.remove("active");
+    powerButton.style.backgroundColor = "#6c757d";
+    tempDisplay.textContent = "OFF";
+  }
+}
+function saveACState(roomKey) {
+  const acStateData = JSON.parse(localStorage.getItem("acStates")) || {};
+  acStateData[roomKey] = acStates[roomKey];
+  localStorage.setItem("acStates", JSON.stringify(acStateData));
+}
 // Helper function to get power stats from elements
 function getRoomPowerStats(roomSuffix) {
   const currentElement = document.getElementById(`current-${roomSuffix}`);
@@ -2012,64 +2037,83 @@ function renderRoomPage(data, roomKeyword, roomName) {
       const tempDisplay = acCard.querySelector(".temperature-air");
 
       // Xử lý nút bật/tắt
+      // if (e.target.closest(".controls .btn:first-child")) {
+      //   console.log("Press button to toggle AC state");
+
+      //   // Debug: Log trạng thái hiện tại trước khi toggle
+      //   console.log(`[DEBUG] Current state for ${room}:`, acStates[room]);
+      //   console.log(`[DEBUG] Available actions for ${room}:`, acActions[room]);
+
+      //   // Toggle trạng thái AC của phòng
+      //   acStates[room].isOn = !acStates[room].isOn;
+
+      //   // Lấy action tương ứng với phòng và trạng thái
+      //   const selectedAction = acStates[room].isOn
+      //     ? acActions[room].on
+      //     : acActions[room].off;
+
+      //   // Debug: Log action được chọn
+      //   console.log(`[DEBUG] Selected action:`, selectedAction);
+      //   console.log(`[DEBUG] Action to trigger:`, selectedAction?.action);
+
+      //   // Validate action trước khi trigger
+      //   if (!selectedAction || !selectedAction.action) {
+      //     console.error(
+      //       `[ERROR] Invalid action for room ${room}, state: ${
+      //         acStates[room].isOn ? "ON" : "OFF"
+      //       }`
+      //     );
+      //     // Revert state nếu action không hợp lệ
+      //     acStates[room].isOn = !acStates[room].isOn; // Revert the state
+      //     updateACStatus(acCard, room); // Update UI to reflect reverted state
+      //     return;
+      //   }
+
+      //   // Trigger action với .action syntax
+      //   try {
+      //     eraWidget.triggerAction(selectedAction.action, null);
+      //     console.log(
+      //       `[SUCCESS] Triggered action for ${room}: ${
+      //         acStates[room].isOn ? "ON" : "OFF"
+      //       }`
+      //     );
+
+      //     // Cập nhật UI sau khi trigger thành công
+      //     updateACStatus(acCard, room);
+      //   } catch (error) {
+      //     console.error(`[ERROR] Failed to trigger action:`, error);
+      //     // Revert state nếu trigger failed
+      //     acStates[room].isOn = !acStates[room].isOn;
+      //     updateACStatus(acCard, room);
+      //   }
+
+      //   // Final debug log
+      //   console.log(
+      //     `[FINAL] Room: ${room}, Final AC State: ${
+      //       acStates[room].isOn ? "ON" : "OFF"
+      //     }`
+      //   );
+      // }
       if (e.target.closest(".controls .btn:first-child")) {
         console.log("Press button to toggle AC state");
 
-        // Debug: Log trạng thái hiện tại trước khi toggle
-        console.log(`[DEBUG] Current state for ${room}:`, acStates[room]);
-        console.log(`[DEBUG] Available actions for ${room}:`, acActions[room]);
+        // Toggle AC state
+        acStates[roomKey].isOn = !acStates[roomKey].isOn;
 
-        // Toggle trạng thái AC của phòng
-        acStates[room].isOn = !acStates[room].isOn;
+        // Immediately update UI
+        updateACStatus(acCard, room);
+        updateACStatusUI(container, roomKey);
 
-        // Lấy action tương ứng với phòng và trạng thái
-        const selectedAction = acStates[room].isOn
-          ? acActions[room].on
-          : acActions[room].off;
+        // Trigger hardware action
+        const selectedAction = acStates[roomKey].isOn
+          ? acActions[roomKey].on
+          : acActions[roomKey].off;
 
-        // Debug: Log action được chọn
-        console.log(`[DEBUG] Selected action:`, selectedAction);
-        console.log(`[DEBUG] Action to trigger:`, selectedAction?.action);
+        eraWidget.triggerAction(selectedAction.action, null);
 
-        // Validate action trước khi trigger
-        if (!selectedAction || !selectedAction.action) {
-          console.error(
-            `[ERROR] Invalid action for room ${room}, state: ${
-              acStates[room].isOn ? "ON" : "OFF"
-            }`
-          );
-          // Revert state nếu action không hợp lệ
-          acStates[room].isOn = !acStates[room].isOn; // Revert the state
-          updateACStatus(acCard, room); // Update UI to reflect reverted state
-          return;
-        }
-
-        // Trigger action với .action syntax
-        try {
-          eraWidget.triggerAction(selectedAction.action, null);
-          console.log(
-            `[SUCCESS] Triggered action for ${room}: ${
-              acStates[room].isOn ? "ON" : "OFF"
-            }`
-          );
-
-          // Cập nhật UI sau khi trigger thành công
-          updateACStatus(acCard, room);
-        } catch (error) {
-          console.error(`[ERROR] Failed to trigger action:`, error);
-          // Revert state nếu trigger failed
-          acStates[room].isOn = !acStates[room].isOn;
-          updateACStatus(acCard, room);
-        }
-
-        // Final debug log
-        console.log(
-          `[FINAL] Room: ${room}, Final AC State: ${
-            acStates[room].isOn ? "ON" : "OFF"
-          }`
-        );
+        // Persist state to localStorage
+        saveACState(roomKey);
       }
-
       // Xử lý giảm nhiệt độ
       if (e.target.closest(".controls .btn:nth-child(3)")) {
         if (
@@ -2674,7 +2718,17 @@ eraWidget.init({
     valueAir1 = configuration.actions[6];
     valueAir2 = configuration.actions[7];
     valueAir3 = configuration.actions[8];
-    setTimeout(initializeACTemperatures, 500);
+    setTimeout(() => {
+      initializeACTemperatures();
+
+      // Add visual feedback for UI updates
+      document.querySelectorAll(".btn").forEach((btn) => {
+        btn.addEventListener("click", function () {
+          this.classList.add("btn-feedback");
+          setTimeout(() => this.classList.remove("btn-feedback"), 300);
+        });
+      });
+    }, 500);
   },
   // Hàm lấy giá trị từ các ID và cập nhật giao diện
   onValues: (values) => {
@@ -2857,21 +2911,22 @@ eraWidget.init({
 });
 
 function initializeACTemperatures() {
-  if (!configAirConditioner || !latestValues[configAirConditioner.id]) return;
+  // Load saved states
+  const savedStates = JSON.parse(localStorage.getItem("acStates")) || {};
 
-  const temperatures = {
-    lotus: latestValues[configAirConditioner.id].value,
-    "lavender-1": latestValues[configAirConditioner2?.id]?.value || 20,
-    "lavender-2": latestValues[configAirConditioner3?.id]?.value || 20,
-  };
+  Object.keys(savedStates).forEach((roomKey) => {
+    if (acStates[roomKey]) {
+      // Merge saved state with defaults
+      acStates[roomKey] = {
+        ...acStates[roomKey],
+        ...savedStates[roomKey],
+      };
 
-  Object.keys(temperatures).forEach((room) => {
-    if (acStates[room]) {
-      acStates[room].roomTemperatures = temperatures[room];
-      const tempDisplay = document.querySelector(
-        `[data-room="${room}"] .temperature-air`
-      );
-      if (tempDisplay) tempDisplay.textContent = `${temperatures[room]}°C`;
+      // Update UI if room is active
+      const acCard = document.querySelector(`.ac-card[data-room="${roomKey}"]`);
+      if (acCard) {
+        updateACStatusUI(acCard, roomKey);
+      }
     }
   });
 }
