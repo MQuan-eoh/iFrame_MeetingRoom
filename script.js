@@ -1945,6 +1945,17 @@ function renderRoomPage(data, roomKeyword, roomName) {
     acStates[roomKey].power = powerStats.power;
     console.log("Updated state:", acStates[roomKey]);
   }
+
+  // Lấy valueAir cho phòng hiện tại
+  const valueAir = valueAirMap[roomKey];
+  if (valueAir) {
+    // Gán các hành động bật/tắt vào acActions
+    acActions[roomKey].on = valueAir.on;
+    acActions[roomKey].off = valueAir.off;
+  } else {
+    console.warn(`valueAir not found for roomKey: ${roomKey}`);
+  }
+
   // Tìm cuộc họp đang diễn ra hoặc sắp diễn ra
   let currentMeeting = null;
   let upcomingMeetings = [];
@@ -2038,7 +2049,8 @@ function renderRoomPage(data, roomKeyword, roomName) {
             }`
           );
           // Revert state nếu action không hợp lệ
-          acStates[room].isOn = !acStates[room].isOn;
+          acStates[room].isOn = !acStates[room].isOn; // Revert the state
+          updateACStatus(acCard, room); // Update UI to reflect reverted state
           return;
         }
 
