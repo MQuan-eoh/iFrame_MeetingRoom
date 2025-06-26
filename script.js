@@ -500,19 +500,7 @@ document.addEventListener("DOMContentLoaded", function () {
   showProgressBar();
   uploadButton.addEventListener("click", async function (event) {
     event.preventDefault();
-    try {
-      // Thử dùng file handle đã có
-      if (fileHandle) {
-        const file = await fileHandle.getFile();
-        await handleFileUpload(file);
-        return;
-      }
-    } catch (error) {
-      console.error("Không thể sử dụng file handle cũ:", error);
-      fileHandle = null;
-    }
-
-    // Nếu không có file handle hoặc có lỗi, tạo input mới
+    //Only show the progress bar if the file input is clicked
     const fileInput = document.createElement("input");
     fileInput.type = "file";
     fileInput.accept = ".xlsx, .xls";
@@ -556,16 +544,6 @@ document
 async function handleFileUpload(file) {
   const progressContainer = document.getElementById("progressContainer");
   const progressStatus = document.getElementById("progressStatus");
-  if (window.showOpenFilePicker) {
-    try {
-      // File handle code here
-    } catch (error) {
-      console.error("Không thể lấy file handle:", error);
-      fileHandle = null;
-    }
-  } else {
-    fileHandle = null;
-  }
 
   try {
     updateProgress(10, "Đang khởi tạo...");
@@ -593,42 +571,37 @@ async function handleFileUpload(file) {
     }
 
     updateProgress(40, "Đang xử lý dữ liệu...");
+    // const data = await processExcelFile(file);
+
+    // // Lấy dữ liệu từ cache để merge
+    // const existingCache = JSON.parse(localStorage.getItem("fileCache")) || {
+    //   data: [],
+    // };
+    // const endedMeetings = existingCache.data
+    //   ? existingCache.data.filter(
+    //       (meeting) => meeting.isEnded && meeting.forceEndedByUser
+    //     )
+    //   : [];
     const data = await processExcelFile(file);
+    const today = new Date(); //filtered today's meetings
+    // Lấy ended meetings từ Firebase
 
-    // Lấy dữ liệu từ cache để merge
-    const existingCache = JSON.parse(localStorage.getItem("fileCache")) || {
-      data: [],
-    };
-    const endedMeetings = existingCache.data
-      ? existingCache.data.filter(
-          (meeting) => meeting.isEnded && meeting.forceEndedByUser
-        )
-      : [];
+    const dateKey = `${padZero(today.getDate())}-${padZero(
+      today.getMonth() + 1
+    )}-${today.getFullYear()}`;
+    const endedMeetings = (await readFromFirebase(dateKey)).flatMap(
+      Object.values
+    );
 
-    // Merge dữ liệu mới với trạng thái các cuộc họp đã kết thúc
     const mergedData = data.map((meeting) => {
-      const endedMeeting = endedMeetings.find(
-        (ended) =>
-          ended.id === meeting.id &&
-          ended.room === meeting.room &&
-          ended.date === meeting.date
+      const ended = endedMeetings.find(
+        (e) =>
+          e.id === meeting.id &&
+          e.room === meeting.room &&
+          e.date === meeting.date
       );
-
-      if (endedMeeting) {
-        return {
-          ...meeting,
-          isEnded: true,
-          forceEndedByUser: true,
-          endTime: endedMeeting.endTime,
-          lastUpdated: endedMeeting.lastUpdated,
-          originalEndTime: endedMeeting.originalEndTime,
-        };
-      }
-      return meeting;
+      return ended ? { ...meeting, ...ended } : meeting;
     });
-
-    // Lọc chỉ các meeting hôm nay
-    const today = new Date();
     const filteredData = mergedData.filter((meeting) => {
       const meetingDate = new Date(meeting.date.split("/").reverse().join("-"));
       return meetingDate.toDateString() === today.toDateString();
@@ -663,7 +636,7 @@ async function handleFileUpload(file) {
 
     updateProgress(100, "Hoàn thành!");
     hideProgressBar();
-
+    await writeToFirebase(mergedData);
     setTimeout(() => {
       progressContainer.style.display = "none";
       progressContainer.classList.remove("upload-complete");
@@ -1496,7 +1469,7 @@ async function checkFileChanges() {
     const existingCache = { data: await readFromFirebase(dateStr) };
 
     // Lọc ra các cuộc họp đã kết thúc sớm
-    const endedMeetings = existingCache.data.filter(
+    const endedMeetings = (existingCache?.data || []).filter(
       (meeting) => meeting.isEnded && meeting.forceEndedByUser
     );
 
@@ -2574,7 +2547,7 @@ eraWidget.init({
     configVoltage = configuration.realtime_configs[3];
     configPeopleDetection1 = configuration.realtime_configs[4];
     configTemp2 = configuration.realtime_configs[15];
-    configHumi2 = configuration.realtime_configs[5];
+    configHumi2 = configuration.realtime_configs[12];
     configCurrent2 = configuration.realtime_configs[6];
     configPower2 = configuration.realtime_configs[7];
 
@@ -2583,7 +2556,7 @@ eraWidget.init({
     configCurrent3 = configuration.realtime_configs[10];
     configPower3 = configuration.realtime_configs[11];
 
-    configAirConditioner = configuration.realtime_configs[12];
+    configAirConditioner = configuration.realtime_configs[5];
     configAirConditioner2 = configuration.realtime_configs[13];
     configAirConditioner3 = configuration.realtime_configs[14];
     // People detection sensors
@@ -2728,12 +2701,12 @@ eraWidget.init({
     }
 
     if (configAirConditioner && values[configAirConditioner.id]) {
-      const airValue = values[configAirConditioner.id].value;
-      roomTemperatures.lotus = parseFloat(airValue);
+      const airValue1 = values[configAirConditioner.id].value;
+      roomTemperatures.lotus = parseFloat(airValue1);
     }
-    if (configAirConditioner && values[configAirConditioner.id]) {
-      const airValue = values[configAirConditioner.id].value;
-      roomTemperatures.lotus = parseFloat(airValue);
+    if (configAirConditioner2 && values[configAirConditioner2.id]) {
+      const airValue2 = values[configAirConditioner2.id].value;
+      roomTemperatures["lavender-1"] = parseFloat(airValue2);
     }
 
     if (configAirConditioner3 && values[configAirConditioner3.id]) {
