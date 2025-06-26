@@ -453,7 +453,7 @@ function updateScheduleTable(data) {
     <div role="cell">${meeting.startTime}</div>
     <!-- Hiển thị endTime mới nếu đã kết thúc -->
     <div role="cell" class="${meeting.isEnded ? "ended-meeting" : ""}">
-      ${meeting.isEnded ? meeting.endTime : meeting.endTime}
+      ${meeting.endTime}
     </div>
     <div role="cell">${meeting.duration}</div>
     <div role="cell">${meeting.purpose}</div>
@@ -538,6 +538,71 @@ document.addEventListener("click", function (event) {
     handleEndMeeting(event);
   }
 });
+
+async function handleEndMeeting(event) {
+  const roomSection = event.target.closest(".room-section");
+  if (!roomSection) {
+    console.error("Could not find room section for the meeting.");
+    return;
+  }
+
+  const roomNameElement = roomSection.querySelector(".room-number");
+  if (!roomNameElement) {
+    console.error("Could not find room name element.");
+    return;
+  }
+  const roomName = roomNameElement.textContent;
+  const now = new Date();
+  const formattedCurrentTime = `${padZero(now.getHours())}:${padZero(
+    now.getMinutes()
+  )}`;
+  const currentTimeWithSeconds = `${formattedCurrentTime}:${padZero(
+    now.getSeconds()
+  )}`;
+
+  const today = new Date();
+  const dateKey = `${padZero(today.getDate())}-${padZero(
+    today.getMonth() + 1
+  )}-${today.getFullYear()}`;
+
+  // Fetch today's meetings from Firebase
+  const meetingsData = await readFromFirebase(dateKey);
+  const meetings = Array.isArray(meetingsData)
+    ? meetingsData
+    : meetingsData
+    ? Object.values(meetingsData)
+    : [];
+
+  if (!meetings || meetings.length === 0) {
+    alert("Không tìm thấy dữ liệu cuộc họp cho ngày hôm nay.");
+    return;
+  }
+
+  // Find the currently active meeting in the specified room
+  const activeMeeting = meetings.find(
+    (m) =>
+      normalizeRoomName(m.room) === normalizeRoomName(roomName) &&
+      isTimeInRange(currentTimeWithSeconds, m.startTime, m.endTime) &&
+      !m.isEnded
+  );
+
+  if (!activeMeeting) {
+    alert("Không tìm thấy cuộc họp đang diễn ra để kết thúc.");
+    return;
+  }
+
+  // Update meeting properties to end it
+  activeMeeting.isEnded = true;
+  activeMeeting.forceEndedByUser = true;
+  activeMeeting.endTime = formattedCurrentTime; // Update the end time
+
+  // Persist the updated meeting list back to Firebase
+  await writeToFirebase(meetings);
+
+  // Update the UI immediately to reflect the changes
+  updateRoomStatus(meetings);
+  updateScheduleTable(meetings); // This updates the schedule table view
+}
 
 document
   .getElementById("stopUploadBtn")
@@ -1323,42 +1388,47 @@ function isTimeOverdue(endTime, currentTime) {
 }
 
 //=====Hàm để tự động cập nhật thời gian và trạng thái - Function related times, overdueTime=======
-function startAutoUpdate(data) {
-  //Add function to merge with ended meetings
-  const mergeWithEndedMeetings = (meetings) => {
-    const endedMeetings =
-      JSON.parse(localStorage.getItem("endedMeetings")) || [];
-    return meetings.map((meeting) => {
-      const endedMeeting = endedMeetings.find(
-        (e) =>
-          e.id === meeting.id &&
-          e.room === meeting.room &&
-          e.date === meeting.date
-      );
-      return endedMeeting ? { ...meeting, ...endedMeeting } : meeting;
-    });
+function startAutoUpdate() {
+  // Clear any existing interval to prevent duplicates
+  if (window.autoUpdateInterval) {
+    clearInterval(window.autoUpdateInterval);
+  }
+
+  const updateProcess = async () => {
+    const today = new Date();
+    const dateKey = `${padZero(today.getDate())}-${padZero(
+      today.getMonth() + 1
+    )}-${today.getFullYear()}`;
+
+    try {
+      // Fetch the latest meeting data from Firebase
+      const meetingsData = await readFromFirebase(dateKey);
+      const meetings = Array.isArray(meetingsData)
+        ? meetingsData
+        : meetingsData
+        ? Object.values(meetingsData)
+        : [];
+
+      if (meetings.length > 0) {
+        updateRoomStatus(meetings);
+      }
+    } catch (error) {
+      console.error("Error during auto-update:", error);
+    }
   };
 
-  // Cập nhật lần đầu với dữ liệu đã merge
-  const mergedData = mergeWithEndedMeetings(data);
-  updateRoomStatus(mergedData);
+  // Run it once immediately
+  updateProcess();
 
-  const intervalId = setInterval(() => {
-    const currentTime = getCurrentTime();
-    if (currentTime.endsWith(":00")) {
-      // Lấy dữ liệu mới nhất và merge
-      const updatedData = mergeWithEndedMeetings(data);
-      updateRoomStatus(updatedData);
-    }
-  }, 1000);
+  // Then run it every minute
+  window.autoUpdateInterval = setInterval(updateProcess, 60000); // 60000 ms = 1 minute
 
-  window.autoUpdateInterval = intervalId;
-  return () => clearInterval(intervalId);
+  return () => clearInterval(window.autoUpdateInterval);
 }
 
 let previousStates = {};
 function updateSingleRoomStatus(roomCode, meetings, currentTime) {
-  console.log("Updating room status for:", roomCode);
+  console.log("Updating room status for:", roomCode, "at", currentTime);
 
   const roomSections = document.querySelectorAll(".room-section");
   const roomSection = Array.from(roomSections).find(
@@ -1381,23 +1451,20 @@ function updateSingleRoomStatus(roomCode, meetings, currentTime) {
   const indicatorDot = roomSection.querySelector(
     ".status-indicator .indicator-dot"
   );
+  const endMeetingButton = roomSection.querySelector(".end-meeting");
 
-  // Lọc các cuộc họp cho phòng hiện tại, bao gồm cả những cuộc họp đã kết thúc
   const roomMeetings = meetings.filter(
-    (meeting) =>
-      normalizeRoomName(meeting.room) === normalizeRoomName(roomCode) &&
-      !isTimeOverdue(meeting.endTime, currentTime)
+    (meeting) => normalizeRoomName(meeting.room) === normalizeRoomName(roomCode)
   );
 
-  // Tìm cuộc họp đang diễn ra và chưa bị kết thúc sớm
+  roomMeetings.sort(
+    (a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime)
+  );
+
   const activeMeeting = roomMeetings.find(
-    (meeting) =>
-      isValidMeetingState(meeting, currentTime) &&
-      !meeting.isEnded &&
-      !meeting.forceEndedByUser
+    (m) => isTimeInRange(currentTime, m.startTime, m.endTime) && !m.isEnded
   );
 
-  // Cập nhật giao diện
   if (activeMeeting) {
     titleElement.innerHTML = `<span>Thông tin cuộc họp:</span> ${
       activeMeeting.content || activeMeeting.purpose
@@ -1405,40 +1472,30 @@ function updateSingleRoomStatus(roomCode, meetings, currentTime) {
     startTimeElement.innerHTML = `<span>Thời gian bắt đầu:</span> ${activeMeeting.startTime}`;
     endTimeElement.innerHTML = `<span>Thời gian kết thúc:</span> ${activeMeeting.endTime}`;
     statusIndicator.textContent = "Đang họp";
-    indicatorDot.classList.remove("available");
-    indicatorDot.classList.add("busy");
+    indicatorDot.className = "indicator-dot busy";
+    if (endMeetingButton) endMeetingButton.style.display = "block";
   } else {
-    // Kiểm tra xem có cuộc họp sắp diễn ra không
     const upcomingMeeting = roomMeetings.find(
-      (meeting) =>
-        !meeting.isEnded &&
-        !meeting.forceEndedByUser &&
-        meeting.startTime > currentTime
+      (m) =>
+        timeToMinutes(m.startTime) > timeToMinutes(currentTime) && !m.isEnded
     );
 
     if (upcomingMeeting) {
-      titleElement.innerHTML = `<span>Thông tin cuộc họp sắp diễn ra:</span> ${
+      titleElement.innerHTML = `<span>Sắp diễn ra:</span> ${
         upcomingMeeting.content || upcomingMeeting.purpose
       }`;
       startTimeElement.innerHTML = `<span>Thời gian bắt đầu:</span> ${upcomingMeeting.startTime}`;
       endTimeElement.innerHTML = `<span>Thời gian kết thúc:</span> ${upcomingMeeting.endTime}`;
       statusIndicator.textContent = "Sắp họp";
-      indicatorDot.classList.remove("busy");
-      indicatorDot.classList.add("available");
+      indicatorDot.className = "indicator-dot available";
     } else {
-      titleElement.innerHTML = `<span>Thông tin cuộc họp:</span> Trống`;
-      startTimeElement.innerHTML = `<span>Thời gian bắt đầu:</span> --:--`;
-      endTimeElement.innerHTML = `<span>Thời gian kết thúc:</span> --:--`;
+      titleElement.innerHTML = "<span>Thông tin cuộc họp:</span> Trống";
+      startTimeElement.innerHTML = "<span>Thời gian bắt đầu:</span> --:--";
+      endTimeElement.innerHTML = "<span>Thời gian kết thúc:</span> --:--";
       statusIndicator.textContent = "Trống";
-      indicatorDot.classList.remove("busy");
-      indicatorDot.classList.add("available");
+      indicatorDot.className = "indicator-dot available";
     }
-    if (activeMeeting && activeMeeting.isEnded) {
-      titleElement.innerHTML = `<span>Thông tin cuộc họp:</span> ĐÃ KẾT THÚC`;
-      statusIndicator.textContent = "Đã kết thúc";
-      indicatorDot.classList.remove("busy");
-      indicatorDot.classList.add("ended");
-    }
+    if (endMeetingButton) endMeetingButton.style.display = "none";
   }
 }
 if (!Element.prototype.contains) {
