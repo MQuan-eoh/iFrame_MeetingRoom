@@ -1711,11 +1711,9 @@ document.addEventListener("DOMContentLoaded", function () {
       const roomText = this.querySelector(".button-text").textContent;
       if (roomText === "P.HỌP LẦU 3") {
         loadDynamicPage("room1");
-        console.log("Press button of P.1");
       }
       if (roomText === "P.HỌP LẦU 4") {
         loadDynamicPage("room2");
-        console.log("Press button of P.2");
       }
     });
   });
@@ -1770,7 +1768,7 @@ function getRoomPowerStats(roomSuffix) {
   console.log("Power element:", powerElement);
 
   // Get the actual values from the elements
-  const currentValue = currentElement
+  const pm25Value = currentElement
     ? parseFloat(currentElement.textContent) || 0
     : 0;
   const powerValue = powerElement
@@ -1778,11 +1776,11 @@ function getRoomPowerStats(roomSuffix) {
     : 0;
 
   console.log(
-    `Room ${roomSuffix} stats - Current: ${currentValue}A, Power: ${powerValue}KW`
+    `Room ${roomSuffix} stats - Current: ${pm25Value}A, Power: ${powerValue}KW`
   );
 
   return {
-    current: currentValue,
+    current: pm25Value,
     power: powerValue,
   };
 }
@@ -1868,10 +1866,10 @@ function renderRoomPage(data, roomKeyword, roomName) {
     console.log("=== ERA Widget Values Update Debug ===");
     console.log("Received values:", values);
 
-    if (configCurrent && values[configCurrent.id]) {
+    if (config25PM && values[config25PM.id]) {
       console.log(
         `Room ${roomKey} current value update:`,
-        values[configCurrent.id].value
+        values[config25PM.id].value
       );
     }
     if (configPower && values[configPower.id]) {
@@ -1881,10 +1879,9 @@ function renderRoomPage(data, roomKeyword, roomName) {
       );
     }
   };
-
   const valueAirMap = {
-    "Phòng họp lầu 3": valueAir1,
-    "Phòng họp lầu 4": valueAir2,
+    "phòng họp lầu 3": valueAir1,
+    "phòng họp lầu 4": valueAir2,
   };
   const updateRoomStats = () => {
     console.log(`Updating stats for ${roomKey}`);
@@ -1929,11 +1926,17 @@ function renderRoomPage(data, roomKeyword, roomName) {
   setTimeout(() => {
     const container = document.querySelector(".container");
     if (!container) return;
+
     container.addEventListener("click", (e) => {
       const acCard = e.target.closest(".ac-card");
       if (!acCard) return;
-      const room = acCard.dataset.room.toLowerCase(); // Lấy tên phòng từ data-room
+
+      // Normalize room name to lowercase
+      const room = acCard.dataset.room.toLowerCase();
+
+      // Use normalized room name
       const valueAir = valueAirMap[room];
+
       if (!valueAir) {
         console.error(`Không tìm thấy valueAir cho phòng: ${room}`);
         return;
@@ -2012,14 +2015,14 @@ function renderRoomPage(data, roomKeyword, roomName) {
               width="30"
             />
             <div>
-              <div>Power meter AC 1</div>
+              <div>Thông tin phòng họp</div>
                   <div>
-                    Dòng điện: <span id="current-${suffix}">${powerStats.current.toFixed(
+                    Nhiệt độ: <span id="current-${suffix}">${powerStats.current.toFixed(
     1
   )}</span> A
                   </div>
                   <div>
-                    Công suất: <span id="power-${suffix}">${powerStats.power.toFixed(
+                    Độ ẩm: <span id="power-${suffix}">${powerStats.power.toFixed(
     2
   )}</span> KW
                   </div>
@@ -2170,12 +2173,12 @@ function loadDynamicPage(pageType) {
     let roomKeyword, roomName;
     switch (pageType) {
       case "room1":
-        roomKeyword = "Phòng họp lầu 3";
-        roomName = "Lotus";
+        roomKeyword = "Phòng họp lầu 3"; // Updated from "Lotus"
+        roomName = "Phòng họp lầu 3"; // Updated from "Lotus"
         break;
       case "room2":
-        roomKeyword = "lavender-1";
-        roomName = "Lavender-1";
+        roomKeyword = "Phòng họp lầu 4"; // Updated from "lavender-1"
+        roomName = "Phòng họp lầu 4"; // Updated from "Lavender-1"
         break;
       default:
         console.error("Unknown room type:", pageType);
@@ -2397,8 +2400,8 @@ const eraWidget = new EraWidget();
 // Lấy các phần tử HTML dựa trên ID, liên kết với giao diện người dùng
 const temp = document.getElementById("temperature-eRa");
 const humi = document.getElementById("humidity-eRa");
-const currentIndex = document.getElementById("current-eRa");
-const voltageIndex = document.getElementById("voltage-eRa");
+const pm25Index = document.getElementById("current-eRa");
+const pm10Index = document.getElementById("voltage-eRa");
 
 const temp2 = document.getElementById("temperature-eRa2");
 const humi2 = document.getElementById("humidity-eRa2");
@@ -2411,8 +2414,8 @@ const airConditioner2 = document.getElementById("temperature-airConditioner");
 let currentACTemperature = 20; // Giá trị mặc định
 let configTemp = null,
   configHumi = null,
-  configCurrent = null,
-  configVoltage = null,
+  config25PM = null,
+  config10PM = null,
   configPower = null,
   configTemp2 = null,
   configHumi2 = null,
@@ -2434,8 +2437,8 @@ eraWidget.init({
     // Lưu các cấu hình khi nhận được từ widget
     configTemp = configuration.realtime_configs[0];
     configHumi = configuration.realtime_configs[1];
-    configCurrent = configuration.realtime_configs[2];
-    configVoltage = configuration.realtime_configs[3];
+    config25PM = configuration.realtime_configs[2];
+    config10PM = configuration.realtime_configs[3];
     configPeopleDetection1 = configuration.realtime_configs[4];
     configTemp2 = configuration.realtime_configs[15];
     configHumi2 = configuration.realtime_configs[12];
@@ -2454,8 +2457,8 @@ eraWidget.init({
     acActions["Phòng họp lầu 4"].on = configuration.actions[2];
     acActions["Phòng họp lầu 4"].off = configuration.actions[3];
 
-    valueAir1 = configuration.actions[6];
-    valueAir2 = configuration.actions[7];
+    valueAir1 = configuration.actions[4];
+    valueAir2 = configuration.actions[5];
 
     setTimeout(() => {
       // Add visual feedback for UI updates
@@ -2472,8 +2475,8 @@ eraWidget.init({
     console.log("Configuration:", {
       configTemp,
       configHumi,
-      configCurrent,
-      configVoltage,
+      config25PM,
+      config10PM,
       configPower,
 
       configTemp2,
@@ -2522,22 +2525,22 @@ eraWidget.init({
       if (humi) humi.textContent = humidValue;
     }
 
-    if (configCurrent && values[configCurrent.id]) {
+    if (config25PM && values[config25PM.id]) {
       updateRoomElements(
         " Phòng họp lầu 3",
-        values[configCurrent.id].value,
-        values[configVoltage?.id]?.value
+        values[config25PM.id].value,
+        values[config10PM?.id]?.value
       );
     }
 
-    if (configCurrent && values[configCurrent.id]) {
-      const currentValue = values[configCurrent.id].value;
-      if (currentIndex) currentIndex.textContent = currentValue;
+    if (config25PM && values[config25PM.id]) {
+      const pm25Value = values[config25PM.id].value;
+      if (pm25Index) pm25Index.textContent = pm25Value;
     }
 
-    if (configVoltage && values[configVoltage.id]) {
-      const voltageValue = values[configVoltage.id].value;
-      if (voltageIndex) voltageIndex.textContent = voltageValue;
+    if (config10PM && values[config10PM.id]) {
+      const pm10Value = values[config10PM.id].value;
+      if (pm10Index) pm10Index.textContent = pm10Value;
     }
 
     if (configTemp2 && values[configTemp2.id]) {
@@ -2598,9 +2601,8 @@ eraWidget.init({
       const powerElement = document.getElementById(`power-${eraSuffix}`);
 
       if (currentElement && powerElement) {
-        if (configCurrent && values[configCurrent.id]) {
-          currentElement.textContent =
-            values[configCurrent.id].value.toFixed(1);
+        if (config25PM && values[config25PM.id]) {
+          currentElement.textContent = values[config25PM.id].value.toFixed(1);
         }
         if (configPower && values[configPower.id]) {
           powerElement.textContent = values[configPower.id].value.toFixed(2);

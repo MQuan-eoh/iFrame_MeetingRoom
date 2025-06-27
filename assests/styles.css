@@ -327,6 +327,7 @@
   line-height: 1;
   justify-content: start;
   flex-wrap: wrap;
+  font-family: "Roboto", sans-serif;
 }
 
 /* Thêm icon đồng hồ trước thời gian */
@@ -419,6 +420,7 @@
   min-width: 100px;
   justify-content: center;
   flex-shrink: 0; /* Prevent compression */
+  font-family: "Roboto", sans-serif;
 }
 .rooms-container {
   height: calc(
@@ -568,13 +570,6 @@
   display: flex;
   align-items: center;
   gap: 30px;
-}
-
-.status-indicator {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 120px; /* Fixed width for alignment */
 }
 
 .indicator-dot {
@@ -3304,7 +3299,19 @@ button:hover {
   padding: 4px 8px;
   border-radius: 4px;
 }
+.people-indicator or {
+  transition: all 0.2s ease;
+}
 
+.people-indicator:hover {
+  transform: scale(1.02);
+  opacity: 0.9;
+}
+
+/* Indicator dot pulse animation for busy status */
+.indicator-dot.busy {
+  animation: pulse 1s infinite;
+}
 .indicator-dot,
 .people-dot {
   width: 10px;
@@ -3317,6 +3324,12 @@ button:hover {
 }
 
 .indicator-dot.available {
+  background-color: #4caf50;
+}
+.people-indicator.busy {
+  background-color: #ff0000;
+}
+.people-indicator .available {
   background-color: #4caf50;
 }
 
