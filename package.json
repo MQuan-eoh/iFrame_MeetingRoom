@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@eohjsc/era-widget": "^1.1.3"
+  }
+}

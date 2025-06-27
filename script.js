@@ -1,3 +1,4 @@
+
 function getCurrentDate() {
   const now = new Date();
   const date = String(now.getDate()).padStart(2, "0");
