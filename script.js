@@ -107,10 +107,10 @@ function formatRoomName(room) {
   if (!room) return "";
 
   const roomMap = {
-    "PHÒNG LOTUS": "Phòng Lotus",
-    "P.LOTUS": "Phòng Lotus",
-    "P.LAVENDER 1": "Phòng Lavender 1",
-    "PHÒNG LAVENDER 1": "Phòng Lavender 1",
+    "PHÒNG HỌP LẦU 3": "Phòng họp lầu 3",
+    "P.HỌP LẦU 3": "Phòng họp lầu 3",
+    "PHÒNG HỌP LẦU 4": "Phòng họp lầu 4",
+    "P.HỌP LẦU 4": "Phòng họp lầu 4",
   };
 
   const normalizedRoom = String(room).trim().toUpperCase();
@@ -1280,7 +1280,7 @@ function updateRoomStatus(data) {
 
   console.log("Today's meetings:", todayMeetings);
 
-  const roomsToUpdate = ["Phòng Lavender 1", "Phòng Lotus"];
+  const roomsToUpdate = ["Phòng họp lầu 4", "Phòng họp lầu 3"];
   roomsToUpdate.forEach((roomName) => {
     updateSingleRoomStatus(roomName, todayMeetings, currentTime);
   });
@@ -1338,12 +1338,17 @@ let previousStates = {};
 function updateSingleRoomStatus(roomCode, meetings, currentTime) {
   console.log("Updating room status for:", roomCode);
 
+  const normalizeRoomName = (name) =>
+    name.toLowerCase().replace(/\s+/g, " ").trim();
+
   const roomSections = document.querySelectorAll(".room-section");
-  const roomSection = Array.from(roomSections).find(
-    (section) =>
-      normalizeRoomName(section.querySelector(".room-number").textContent) ===
-      normalizeRoomName(roomCode)
-  );
+  const roomSection = Array.from(roomSections).find((section) => {
+    const roomElement = section.querySelector(".room-number");
+    return (
+      roomElement &&
+      normalizeRoomName(roomElement.textContent) === normalizeRoomName(roomCode)
+    );
+  });
 
   if (!roomSection) {
     console.warn(`No room section found for room code: ${roomCode}`);
@@ -1704,17 +1709,13 @@ document.addEventListener("DOMContentLoaded", function () {
   roomButtons.forEach((button) => {
     button.addEventListener("click", function () {
       const roomText = this.querySelector(".button-text").textContent;
-      if (roomText === "P.LOTUS") {
+      if (roomText === "P.HỌP LẦU 3") {
         loadDynamicPage("room1");
         console.log("Press button of P.1");
       }
-      if (roomText === "P.LAVENDER 1") {
+      if (roomText === "P.HỌP LẦU 4") {
         loadDynamicPage("room2");
         console.log("Press button of P.2");
-      }
-      if (roomText === "P.LAVENDER 2") {
-        loadDynamicPage("room3");
-        console.log("Press button of P.3");
       }
     });
   });
@@ -1722,28 +1723,24 @@ document.addEventListener("DOMContentLoaded", function () {
 let statusAirConditioner = null;
 
 let action = {
-  lotus: {
+  "Phòng họp lầu 3": {
     actionOn: false,
     actionOff: false,
   },
-  "lavender-1": {
+  "Phòng họp lầu 4": {
     actionOn2: false,
     actionOff2: false,
-  },
-  "lavender-1": {
-    actionOn3: false,
-    actionOff3: false,
   },
 };
 
 let acStates = {
-  lotus: {
+  "Phòng họp lầu 3": {
     isOn: false,
     roomTemperatures: 20,
     minTemp: 16,
     maxTemp: 30,
   },
-  "lavender-1": {
+  "Phòng họp lầu 4": {
     isOn: false,
     roomTemperatures: 19,
     minTemp: 16,
@@ -1751,17 +1748,16 @@ let acStates = {
   },
 };
 const roomSuffixMap = {
-  lotus: "eRa",
-  "lavender-1": "eRa2",
+  "Phòng họp lầu 3": "eRa",
+  "Phòng họp lầu 4": "eRa2",
 };
 const roomEraMap = {
-  lotus: "eRa",
-  "lavender-1": "eRa2",
+  "Phòng họp lầu 3": "eRa",
+  "Phòng họp lầu 4": "eRa2",
 };
 
 function normalizeRoomKey(roomName) {
-  return roomName.toLowerCase().trim();
-  // return roomName.toLowerCase().replace(/\s+/g, "-");
+  return roomName.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
 // Helper function to get power stats from elements
@@ -1791,8 +1787,8 @@ function getRoomPowerStats(roomSuffix) {
   };
 }
 let acActions = {
-  lotus: { on: null, off: null },
-  "lavender-1": { on: null, off: null },
+  "Phòng họp lầu 3": { on: null, off: null },
+  "Phòng họp lầu 4": { on: null, off: null },
 };
 let roomUpdateIntervals = {};
 // Hàm render trang động riêng biệt
@@ -1887,8 +1883,8 @@ function renderRoomPage(data, roomKeyword, roomName) {
   };
 
   const valueAirMap = {
-    lotus: valueAir1,
-    "lavender-1": valueAir2,
+    "Phòng họp lầu 3": valueAir1,
+    "Phòng họp lầu 4": valueAir2,
   };
   const updateRoomStats = () => {
     console.log(`Updating stats for ${roomKey}`);
@@ -1900,25 +1896,6 @@ function renderRoomPage(data, roomKeyword, roomName) {
     if (!currentElement || !powerElement) {
       console.log("Elements not found, skipping update");
       return;
-    }
-
-    // Lấy giá trị mới từ E-Ra platform
-    try {
-      // const values = eraWidget.getValues();
-      // console.log("New values from ERA:", values);
-      if (configCurrent && values[configCurrent.id]) {
-        const currentValue = values[configCurrent.id].value;
-        currentElement.textContent = currentValue.toFixed(1);
-        console.log(`Updated current: ${currentValue}A`);
-      }
-
-      if (configPower && values[configPower.id]) {
-        const powerValue = values[configPower.id].value;
-        powerElement.textContent = powerValue.toFixed(2);
-        console.log(`Updated power: ${powerValue}KW`);
-      }
-    } catch (error) {
-      console.error("Error updating room stats:", error);
     }
   };
 
@@ -2193,7 +2170,7 @@ function loadDynamicPage(pageType) {
     let roomKeyword, roomName;
     switch (pageType) {
       case "room1":
-        roomKeyword = "lotus";
+        roomKeyword = "Phòng họp lầu 3";
         roomName = "Lotus";
         break;
       case "room2":
@@ -2413,8 +2390,8 @@ function sanitizeRoomName(room) {
 }
 let latestValues = {};
 let roomTemperatures = {
-  lotus: 20,
-  "lavender-1": 20,
+  "Phòng họp lầu 3": 20,
+  "Phòng họp lầu 4": 20,
 };
 const eraWidget = new EraWidget();
 // Lấy các phần tử HTML dựa trên ID, liên kết với giao diện người dùng
@@ -2449,7 +2426,7 @@ let configTemp = null,
   actionOn2 = null,
   valueAir1 = null,
   valueAir2 = null,
-  configPeopleDetection1 = null, // Lotus
+  configPeopleDetection1 = null, //Lầu 3
   configPeopleDetection2 = null;
 
 eraWidget.init({
@@ -2471,18 +2448,16 @@ eraWidget.init({
 
     configPeopleDetection2 = configuration.realtime_configs[16];
 
-    acActions.lotus.on = configuration.actions[0];
-    acActions.lotus.off = configuration.actions[1];
+    acActions["Phòng họp lầu 3"].on = configuration.actions[0];
+    acActions["Phòng họp lầu 3"].off = configuration.actions[1];
 
-    acActions["lavender-1"].on = configuration.actions[2];
-    acActions["lavender-1"].off = configuration.actions[3];
+    acActions["Phòng họp lầu 4"].on = configuration.actions[2];
+    acActions["Phòng họp lầu 4"].off = configuration.actions[3];
 
     valueAir1 = configuration.actions[6];
     valueAir2 = configuration.actions[7];
 
     setTimeout(() => {
-      initializeACTemperatures();
-
       // Add visual feedback for UI updates
       document.querySelectorAll(".btn").forEach((btn) => {
         btn.addEventListener("click", function () {
@@ -2549,7 +2524,7 @@ eraWidget.init({
 
     if (configCurrent && values[configCurrent.id]) {
       updateRoomElements(
-        "lotus",
+        " Phòng họp lầu 3",
         values[configCurrent.id].value,
         values[configVoltage?.id]?.value
       );
@@ -2572,7 +2547,7 @@ eraWidget.init({
     // Lavender 1 Room
     if (configCurrent2 && values[configCurrent2.id]) {
       updateRoomElements(
-        "lavender-1",
+        "Phòng họp lầu 4",
         values[configCurrent2.id].value,
         values[configPower2?.id]?.value
       );
@@ -2585,27 +2560,27 @@ eraWidget.init({
 
     if (configAirConditioner && values[configAirConditioner.id]) {
       const airValue1 = values[configAirConditioner.id].value;
-      roomTemperatures.lotus = parseFloat(airValue1);
+      roomTemperatures["Phòng họp lầu 3"] = parseFloat(airValue1);
     }
     if (configAirConditioner2 && values[configAirConditioner2.id]) {
       const airValue2 = values[configAirConditioner2.id].value;
-      roomTemperatures["lavender-1"] = parseFloat(airValue2);
+      roomTemperatures["Phòng họp lầu 4"] = parseFloat(airValue2);
     }
 
     if (configPeopleDetection1 && values[configPeopleDetection1.id]) {
       PeopleDetectionSystem.updateStatus(
-        "lotus",
+        "Phòng họp lầu 3",
         values[configPeopleDetection1.id].value
       );
       console.log(
-        "Lotus have a people detection value:",
+        "Phòng họp lầu 3 have a people detection value:",
         values[configPeopleDetection1.id].value
       );
     }
 
     if (configPeopleDetection2 && values[configPeopleDetection2.id]) {
       PeopleDetectionSystem.updateStatus(
-        "lavender-1",
+        "Phòng họp lầu 4",
         values[configPeopleDetection2.id].value
       );
     }
@@ -2629,27 +2604,6 @@ eraWidget.init({
     return latestValues;
   },
 });
-
-function initializeACTemperatures() {
-  // Load saved states
-  const savedStates = JSON.parse(localStorage.getItem("acStates")) || {};
-
-  Object.keys(savedStates).forEach((roomKey) => {
-    if (acStates[roomKey]) {
-      // Merge saved state with defaults
-      acStates[roomKey] = {
-        ...acStates[roomKey],
-        ...savedStates[roomKey],
-      };
-
-      // Update UI if room is active
-      const acCard = document.querySelector(`.ac-card[data-room="${roomKey}"]`);
-      if (acCard) {
-        updateACStatusUI(acCard, roomKey);
-      }
-    }
-  });
-}
 
 //=================Air Conditioner =================
 let updateIntervals = {};
@@ -2775,6 +2729,9 @@ function getRoomTemperature(roomKey) {
     return null;
   }
 }
+function capitalizeFirst(str) {
+  return str.replace(/\b\w/g, (char) => char.toUpperCase());
+}
 
 // Update updatePeopleStatus function
 function updatePeopleStatus(room, value) {
@@ -2815,8 +2772,13 @@ function findRoomSection(roomName) {
   console.debug(`Found ${sections.length} room sections`);
 
   const found = Array.from(sections).find((section) => {
+    const normalizeName = (name) =>
+      name.toLowerCase().replace(/\s+/g, " ").trim();
+
     const roomNumber = section.querySelector(".room-number");
-    const match = roomNumber && roomNumber.textContent.trim() === roomName;
+    const roomText = roomNumber ? normalizeName(roomNumber.textContent) : "";
+    const match = roomText === normalizeName(roomName);
+
     console.debug(
       `Checking section: ${roomNumber?.textContent.trim()} -> ${match}`
     );
@@ -2832,21 +2794,21 @@ function findRoomSection(roomName) {
 const PeopleDetectionSystem = {
   // State management
   states: {
-    lotus: { isEmpty: true },
-    "lavender-1": { isEmpty: true },
+    "Phòng họp lầu 3": { isEmpty: true },
+    "Phòng họp lầu 4": { isEmpty: true },
   },
 
   // Configuration mapping
   config: {
-    lotus: { sensorId: 4 },
-    "lavender-1": { sensorId: 16 },
+    "Phòng họp lầu 3": { sensorId: 4 },
+    "Phòng họp lầu 4": { sensorId: 16 },
   },
 
   // Room name normalization
   normalizeRoomDisplay(roomKey) {
     const names = {
-      lotus: "Lotus",
-      "lavender-1": "Lavender 1",
+      "P.HỌP LẦU 3": "Phòng họp lầu 3",
+      "Phòng họp lầu 4": "Phòng họp lầu 4",
     };
     return names[roomKey] || roomKey;
   },
@@ -2899,18 +2861,24 @@ const PeopleDetectionSystem = {
   },
 
   updateStatus(roomKey, value) {
+    let isEmpty = value === 1; // Assuming 1 means empty, 0 means occupied
     console.log(`People detection update for ${roomKey}: ${value}`);
     // Convert sensor value to room status (0 = occupied, 1 = empty)
-    const isEmpty = value === 1;
+    const roomMap = {
+      "P.HỌP LẦU 3": "Phòng họp lầu 3",
+      "P.HỌP LẦU 4": "Phòng họp lầu 4",
+    };
 
-    if (this.states[roomKey]?.isEmpty !== isEmpty) {
-      this.states[roomKey].isEmpty = isEmpty;
-      this.updateUI(roomKey, isEmpty);
+    const normalizedRoom = roomMap[roomKey] || roomKey;
+
+    if (this.states[normalizedRoom]?.isEmpty !== isEmpty) {
+      this.states[normalizedRoom].isEmpty = isEmpty;
+      this.updateUI(normalizedRoom, isEmpty);
     }
   },
 
   updateUI(roomKey, isEmpty) {
-    const room = this.normalizeRoomDisplay(roomKey);
+    const room = capitalizeFirst(this.normalizeRoomDisplay(roomKey));
     const section = findRoomSection(room);
 
     if (!section) {
