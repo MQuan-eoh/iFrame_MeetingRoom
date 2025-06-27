@@ -2529,6 +2529,12 @@ eraWidget.init({
         values[configVoltage?.id]?.value
       );
     }
+
+    if (configCurrent && values[configCurrent.id]) {
+      const currentValue = values[configCurrent.id].value;
+      if (currentIndex) currentIndex.textContent = currentValue;
+    }
+
     if (configVoltage && values[configVoltage.id]) {
       const voltageValue = values[configVoltage.id].value;
       if (voltageIndex) voltageIndex.textContent = voltageValue;

@@ -328,17 +328,7 @@
   justify-content: start;
   flex-wrap: wrap;
 }
-.start-time,
-.end-time {
-  font-size: 0.75rem;
-  display: flex;
-  align-items: center;
-  padding: 4px 10px;
-  border-radius: 6px;
-  font-weight: 700;
-  min-width: 100px;
-  justify-content: center;
-}
+
 /* Thêm icon đồng hồ trước thời gian */
 .start-time::before,
 .end-time::before {
@@ -421,6 +411,7 @@
 .start-time,
 .end-time {
   display: flex;
+  font-size: 0.78rem;
   align-items: center;
   padding: 4px 10px;
   border-radius: 6px;
@@ -550,7 +541,7 @@
 }
 .humidity {
   align-self: stretch;
-  padding-left: 30px;
+  padding-left: 34px;
 }
 .power {
   align-self: stretch;
@@ -3384,7 +3375,7 @@ button:hover {
 
 .status-text,
 .people-status-text {
-  font-size: 0.8rem;
+  font-size: 1rem;
   color: #000000;
   font-weight: 500;
   white-space: nowrap;
