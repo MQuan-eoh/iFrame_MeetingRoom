@@ -90,24 +90,6 @@
   display: flex;
   white-space: pre-wrap;
 }
-/* Import font SVN-Gilroy */
-@font-face {
-  font-family: "SVN-Gilroy";
-  src: url("/fonts/SVN-Gilroy-Bold.woff2") format("woff2"),
-    url("/fonts/SVN-Gilroy-Bold.woff") format("woff");
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-}
-
-/* Fallback fonts trong trường hợp SVN-Gilroy không load được */
-@font-face {
-  font-family: "SF Pro Display";
-  src: url("/fonts/SF-Pro-Display-Bold.woff2") format("woff2");
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-}
 
 .welcome-message {
   /* Layout properties */
@@ -573,7 +555,7 @@
   /* margin: auto 0; */
 }
 .humidity {
-  margin-left: -4.8%;
+  margin-left: -4%;
 }
 
 .curren {
