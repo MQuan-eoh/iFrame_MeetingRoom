@@ -2019,12 +2019,12 @@ function renderRoomPage(data, roomKeyword, roomName) {
                   <div>
                     Nhiệt độ: <span id="current-${suffix}">${powerStats.current.toFixed(
     1
-  )}</span> A
+  )}</span> °C
                   </div>
                   <div>
                     Độ ẩm: <span id="power-${suffix}">${powerStats.power.toFixed(
     2
-  )}</span> KW
+  )}</span> %
                   </div>
             <div class="status">
               <i class="fas fa-circle"> </i>
@@ -2419,8 +2419,8 @@ let configTemp = null,
   configPower = null,
   configTemp2 = null,
   configHumi2 = null,
-  configCurrent2 = null,
-  configPower2 = null,
+  // configCurrent2 = null,
+  // configPower2 = null,
   configAirConditioner = null,
   configAirConditioner2 = null,
   actionOff1 = null,
@@ -2440,16 +2440,20 @@ eraWidget.init({
     config25PM = configuration.realtime_configs[2];
     config10PM = configuration.realtime_configs[3];
     configPeopleDetection1 = configuration.realtime_configs[4];
-    configTemp2 = configuration.realtime_configs[15];
-    configHumi2 = configuration.realtime_configs[12];
-    configCurrent2 = configuration.realtime_configs[6];
-    configPower2 = configuration.realtime_configs[7];
-
     configAirConditioner = configuration.realtime_configs[5];
-    configAirConditioner2 = configuration.realtime_configs[13];
+    configTemp2 = configuration.realtime_configs[6];
+    configHumi2 = configuration.realtime_configs[7];
+    // configCurrent2 = configuration.realtime_configs[6];
+    // configPower2 = configuration.realtime_configs[7];
+    configAirConditioner2 = configuration.realtime_configs[8];
     // People detection sensors
-
-    configPeopleDetection2 = configuration.realtime_configs[16];
+    configPeopleDetection2 = configuration.realtime_configs[9];
+    configAirConditioner2 = configuration.realtime_configs[10];
+    // People detection sensors
+    configPeopleDetection2 = configuration.realtime_configs[11];
+    configAirConditioner2 = configuration.realtime_configs[12];
+    // People detection sensors
+    configPeopleDetection2 = configuration.realtime_configs[13];
 
     acActions["Phòng họp lầu 3"].on = configuration.actions[0];
     acActions["Phòng họp lầu 3"].off = configuration.actions[1];
@@ -2481,8 +2485,8 @@ eraWidget.init({
 
       configTemp2,
       configHumi2,
-      configCurrent2,
-      configPower2,
+      // configCurrent2,
+      // configPower2,
 
       configAirConditioner,
       configAirConditioner2,
@@ -2554,18 +2558,18 @@ eraWidget.init({
     }
 
     // Lavender 1 Room
-    if (configCurrent2 && values[configCurrent2.id]) {
-      updateRoomElements(
-        "Phòng họp lầu 4",
-        values[configCurrent2.id].value,
-        values[configPower2?.id]?.value
-      );
-    }
+    // if (configCurrent2 && values[configCurrent2.id]) {
+    //   updateRoomElements(
+    //     "Phòng họp lầu 4",
+    //     values[configCurrent2.id].value,
+    //     values[configPower2?.id]?.value
+    //   );
+    // }
 
-    if (configPower2 && values[configPower2.id]) {
-      const powerValue2 = values[configPower2.id].value;
-      if (powerIndex2) powerIndex2.textContent = powerValue2;
-    }
+    // if (configPower2 && values[configPower2.id]) {
+    //   const powerValue2 = values[configPower2.id].value;
+    //   if (powerIndex2) powerIndex2.textContent = powerValue2;
+    // }
 
     if (configAirConditioner && values[configAirConditioner.id]) {
       const airValue1 = values[configAirConditioner.id].value;
