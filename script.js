@@ -2017,12 +2017,12 @@ function renderRoomPage(data, roomKeyword, roomName) {
             <div>
               <div>Thông tin phòng họp</div>
                   <div>
-                    Nhiệt độ: <span id="current-${suffix}">${powerStats.current.toFixed(
+                    Nhiệt độ: <span id="temperature-${suffix}">${powerStats.current.toFixed(
     1
   )}</span> °C
                   </div>
                   <div>
-                    Độ ẩm: <span id="power-${suffix}">${powerStats.power.toFixed(
+                    Độ ẩm: <span id="humidity-${suffix}">${powerStats.power.toFixed(
     2
   )}</span> %
                   </div>
