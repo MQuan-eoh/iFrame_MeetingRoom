@@ -370,10 +370,10 @@
 }
 
 .stats-row {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr 1fr; /* 2 cột bằng nhau */
+  gap: 15px; /* Khoảng cách giữa các cột */
   align-items: center;
-  gap: 20px;
 }
 
 .people-indicator {
@@ -531,20 +531,55 @@
   justify-content: start;
   gap: 20px;
 }
-
+.currentLotus {
+  font-size: 1rem;
+  font-weight: 540;
+  padding: 3px 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
 .temperature,
 .humidity,
-.currentLotus,
 .voltage {
   font-size: 1rem;
   font-weight: 540;
   padding: 3px 0;
-  margin-left: 20px;
+  display: flex;
+  align-items: center;
 }
+
 .humidity {
-  align-self: stretch;
-  padding-left: 34px;
+  padding-left: 0;
+  justify-content: flex-end;
 }
+
+.temperature > span,
+.humidity > span,
+.currentLotus > span,
+.voltage > span {
+  min-width: 40px;
+  display: inline-block;
+  text-align: center;
+}
+
+.temperature {
+  justify-content: flex-start;
+  padding-right: 60px;
+}
+
+.humidity {
+  justify-content: flex-end;
+}
+
+.currentLotus {
+  justify-content: flex-start;
+}
+
+.voltage {
+  justify-content: flex-end;
+}
+
 .power {
   align-self: stretch;
   padding-left: 30px;
