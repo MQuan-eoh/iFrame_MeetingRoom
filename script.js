@@ -1757,33 +1757,21 @@ const roomEraMap = {
 function normalizeRoomKey(roomName) {
   return roomName.toLowerCase().replace(/\s+/g, " ").trim();
 }
-
-// Helper function to get power stats from elements
-function getRoomPowerStats(roomSuffix) {
-  const currentElement = document.getElementById(`current-${roomSuffix}`);
-  const powerElement = document.getElementById(`power-${roomSuffix}`);
-
-  console.log(`Getting power stats for room suffix: ${roomSuffix}`);
-  console.log("Current element:", currentElement);
-  console.log("Power element:", powerElement);
-
-  // Get the actual values from the elements
-  const pm25Value = currentElement
-    ? parseFloat(currentElement.textContent) || 0
-    : 0;
-  const powerValue = powerElement
-    ? parseFloat(powerElement.textContent) || 0
-    : 0;
-
-  console.log(
-    `Room ${roomSuffix} stats - Current: ${pm25Value}A, Power: ${powerValue}KW`
-  );
-
-  return {
-    current: pm25Value,
-    power: powerValue,
+function getRoomPowerStats(roomKey) {
+  const roomStats = {
+    "phòng họp lầu 3": {
+      temp: latestValues[configTemp?.id]?.value || 0,
+      humi: latestValues[configHumi?.id]?.value || 0,
+    },
+    "phòng họp lầu 4": {
+      temp: latestValues[configTemp2?.id]?.value || 0,
+      humi: latestValues[configHumi2?.id]?.value || 0,
+    },
   };
+
+  return roomStats[roomKey.toLowerCase()] || { temp: 0, humi: 0 };
 }
+
 let acActions = {
   "Phòng họp lầu 3": { on: null, off: null },
   "Phòng họp lầu 4": { on: null, off: null },
@@ -1814,7 +1802,9 @@ function renderRoomPage(data, roomKeyword, roomName) {
 
   const roomKey = normalizeRoomKey(roomKeyword);
   const eraSuffix = roomEraMap[roomKey];
-  const powerStats = getRoomPowerStats(eraSuffix);
+  const normalizedRoomKey = roomKey.toLowerCase();
+  const powerStats = getRoomPowerStats(normalizedRoomKey);
+
   console.log("Normalized room key:", roomKey);
   console.log("ERA suffix:", eraSuffix);
   console.log("Initial power stats:", powerStats);
@@ -1827,14 +1817,14 @@ function renderRoomPage(data, roomKeyword, roomName) {
       roomTemperatures: 20,
       minTemp: 16,
       maxTemp: 30,
-      current: powerStats.current,
-      power: powerStats.power,
+      temproom: powerStats.tempValue,
+      humidity: powerStats.humiValue,
     };
   } else {
     console.log(`Updating existing state for room ${roomKey}`);
     console.log("Previous state:", acStates[roomKey]);
-    acStates[roomKey].current = powerStats.current;
-    acStates[roomKey].power = powerStats.power;
+    acStates[roomKey].temproom = powerStats.tempValue;
+    acStates[roomKey].power = powerStats.humiValue;
     console.log("Updated state:", acStates[roomKey]);
   }
   // Cleanup existing interval nếu có
@@ -1846,7 +1836,7 @@ function renderRoomPage(data, roomKeyword, roomName) {
   updateACStatus = function (container, room) {
     console.log("=== AC Status Update Debug ===");
     console.log(`Updating AC status for room: ${room}`);
-    console.log("Current AC state:", acStates[room]);
+    console.log("TempRoom AC state:", acStates[room]);
 
     const roomKey = normalizeRoomKey(room);
     const eraSuffix = roomEraMap[roomKey];
@@ -1855,7 +1845,7 @@ function renderRoomPage(data, roomKeyword, roomName) {
     );
 
     const powerStats = getRoomPowerStats(eraSuffix);
-    console.log("Current power stats:", powerStats);
+    console.log("TempRoom power stats:", powerStats);
 
     console.log("Updated AC state:", acStates[room]);
   };
@@ -1868,7 +1858,7 @@ function renderRoomPage(data, roomKeyword, roomName) {
 
     if (config25PM && values[config25PM.id]) {
       console.log(
-        `Room ${roomKey} current value update:`,
+        `Room ${roomKey} temproom value update:`,
         values[config25PM.id].value
       );
     }
@@ -1884,16 +1874,19 @@ function renderRoomPage(data, roomKeyword, roomName) {
     "phòng họp lầu 4": valueAir2,
   };
   const updateRoomStats = () => {
-    console.log(`Updating stats for ${roomKey}`);
+    const powerStats = getRoomPowerStats(roomKey);
 
-    // Lấy elements hiện tại
-    const currentElement = document.getElementById(`current-${eraSuffix}`);
-    const powerElement = document.getElementById(`power-${eraSuffix}`);
+    const tempElement = document.getElementById(
+      `temperature-${normalizedRoomKey}`
+    );
+    const humiElement = document.getElementById(
+      `humidity-${normalizedRoomKey}`
+    );
 
-    if (!currentElement || !powerElement) {
-      console.log("Elements not found, skipping update");
-      return;
-    }
+    if (tempElement) tempElement.textContent = powerStats.temp.toFixed(1);
+    if (humiElement) humiElement.textContent = powerStats.humi.toFixed(2);
+
+    console.log(`Updated ${roomKey} stats:`, powerStats);
   };
 
   // Lấy thời gian hiện tại
@@ -2017,12 +2010,10 @@ function renderRoomPage(data, roomKeyword, roomName) {
             <div>
               <div>Thông tin phòng họp</div>
                   <div>
-                    Nhiệt độ: <span id="temperature-${suffix}">${powerStats.current.toFixed(
+                    Nhiệt độ: <span id="temperature-${normalizedRoomKey}">${powerStats.temp.toFixed(
     1
   )}</span> °C
-                  </div>
-                  <div>
-                    Độ ẩm: <span id="humidity-${suffix}">${powerStats.power.toFixed(
+                        Độ ẩm: <span id="humidity-${normalizedRoomKey}">${powerStats.humi.toFixed(
     2
   )}</span> %
                   </div>
