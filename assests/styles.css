@@ -1369,15 +1369,15 @@ schedule-table {
   border-radius: 23px;
   font-size: 1rem;
 }
-@media (min-width: 1901px) {
-  .date-picker {
-    margin-right: -24%;
-  }
-}
-@media (min-width: 1300px) and (max-width: 1900px) {
+
+@media (min-width: 1370px) and (max-width: 1600px) {
   .date-picker {
     margin-left: 50%;
-    /* margin-top: -5%; */
+  }
+}
+@media (min-width: 1610px) {
+  .date-picker {
+    margin-left: 65%;
   }
 }
 @media (min-width: 1200px) and (max-width: 1350px) {
@@ -1386,7 +1386,6 @@ schedule-table {
     /* margin-top: -5%; */
   }
 }
-
 
 @media (max-width: 991px) {
   .date-picker {
@@ -2688,6 +2687,16 @@ schedule-table {
 
   .left-column {
     max-width: 450px;
+  }
+  .schedule-actions {
+    position: relative;
+    justify-content: flex-start;
+  }
+
+  .date-picker {
+    position: absolute;
+    right: 0;
+    min-width: 200px;
   }
 }
 
