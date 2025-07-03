@@ -1,8 +1,11 @@
 function getCurrentDate() {
   const now = new Date();
+  now.setHours(now.getHours() + 7);
+
   const date = String(now.getDate()).padStart(2, "0");
-  const month = String(now.getMonth() + 1).padStart(2, "0"); // +1 vì tháng bắt đầu từ 0
+  const month = String(now.getMonth() + 1).padStart(2, "0");
   const year = now.getFullYear();
+
   return `${date}/${month}/${year}`;
 }
 function formatTime(timeStr) {
@@ -106,15 +109,30 @@ function formatDayOfWeek(day) {
 function formatRoomName(room) {
   if (!room) return "";
 
-  const roomMap = {
-    "PHÒNG HỌP LẦU 3": "Phòng họp lầu 3",
-    "P.HỌP LẦU 3": "Phòng họp lầu 3",
-    "PHÒNG HỌP LẦU 4": "Phòng họp lầu 4",
-    "P.HỌP LẦU 4": "Phòng họp lầu 4",
+  // Chuẩn hóa tên phòng - xử lý cả viết tắt
+  const normalized = String(room)
+    .toLowerCase()
+    .replace(
+      /[^a-z0-9àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ\s]/g,
+      ""
+    )
+    .replace(/\s+/g, " ")
+    .replace(/(p\.?|phòng)\s*/g, "phòng ") // Chuẩn hóa phần "P." hoặc "Phòng"
+    .replace(/(lau|lầu)/g, "lầu")
+    .trim();
+
+  console.log(`Formatting room: ${room} -> ${normalized}`); // Log để debug
+
+  // Ánh xạ tên chuẩn
+  const mapping = {
+    "phòng họp lầu 3": "Phòng họp lầu 3",
+    "phòng họp lầu 4": "Phòng họp lầu 4",
+    "phong hop lau 3": "Phòng họp lầu 3",
+    "p hop lau 3": "Phòng họp lầu 3",
+    "p.hop lau 3": "Phòng họp lầu 3",
   };
 
-  const normalizedRoom = String(room).trim().toUpperCase();
-  return roomMap[normalizedRoom] || room;
+  return mapping[normalized] || room;
 }
 
 // Hàm format thời gian sử dụng
@@ -315,16 +333,17 @@ function formatDate(dateInput) {
     // Xử lý Date object từ Excel (do cellDates: true)
     if (dateInput instanceof Date) {
       if (!isNaN(dateInput.getTime())) {
-        const day = dateInput.getDate() + 1;
-        const month = dateInput.getMonth() + 1;
-        const year = dateInput.getFullYear();
+        const adjustedDate = new Date(dateInput);
+        const day = adjustedDate.getDate();
+        const month = adjustedDate.getMonth() + 1;
+        const year = adjustedDate.getFullYear();
+
         return `${String(day).padStart(2, "0")}/${String(month).padStart(
           2,
           "0"
         )}/${year}`;
       }
     }
-
     // Xử lý chuỗi ngày đã được format sẵn dd/mm/yyyy
     if (typeof dateInput === "string") {
       const dateStr = dateInput.trim();
@@ -545,27 +564,27 @@ async function handleFileUpload(file) {
   try {
     updateProgress(10, "Đang khởi tạo...");
 
-    try {
-      updateProgress(20, "Đang đọc file...");
-      const handles = await window.showOpenFilePicker({
-        multiple: false,
-        types: [
-          {
-            description: "Excel Files",
-            accept: {
-              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
-                [".xlsx"],
-              "application/vnd.ms-excel": [".xls"],
-            },
-          },
-        ],
-      });
-      fileHandle = handles[0];
-      const initialFile = await fileHandle.getFile();
-      lastFileData = await initialFile.text();
-    } catch (error) {
-      console.error("Không thể lấy file handle:", error);
-    }
+    // try {
+    //   updateProgress(20, "Đang đọc file...");
+    //   const handles = await window.showOpenFilePicker({
+    //     multiple: false,
+    //     types: [
+    //       {
+    //         description: "Excel Files",
+    //         accept: {
+    //           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+    //             [".xlsx"],
+    //           "application/vnd.ms-excel": [".xls"],
+    //         },
+    //       },
+    //     ],
+    //   });
+    //   fileHandle = handles[0];
+    //   const initialFile = await fileHandle.getFile();
+    //   lastFileData = await initialFile.text();
+    // } catch (error) {
+    //   console.error("Không thể lấy file handle:", error);
+    // }
 
     updateProgress(40, "Đang xử lý dữ liệu...");
     const data = await processExcelFile(file);
@@ -580,7 +599,7 @@ async function handleFileUpload(file) {
         )
       : [];
 
-    // Merge dữ liệu mới với trạng thái các cuộc họp đã kết thúc
+    // // Merge dữ liệu mới với trạng thái các cuộc họp đã kết thúc
     const mergedData = data.map((meeting) => {
       const endedMeeting = endedMeetings.find(
         (ended) =>
@@ -607,15 +626,14 @@ async function handleFileUpload(file) {
       const meetingDate = new Date(meeting.date.split("/").reverse().join("-"));
       return meetingDate.toDateString() === today.toDateString();
     });
-
     updateProgress(60, "Đang cập nhật bảng...");
     updateScheduleTable(filteredData.length > 0 ? filteredData : mergedData);
     updateRoomStatus(mergedData);
     startAutoUpdate(mergedData);
 
     updateProgress(80, "Đang lưu cache...");
-    fileCache.data = mergedData;
-    fileCache.lastModified = new Date().getTime();
+    // fileCache.data = mergedData;
+    // fileCache.lastModified = new Date().getTime();
 
     localStorage.setItem(
       "fileCache",
@@ -1286,12 +1304,18 @@ function updateRoomStatus(data) {
   });
 }
 
-function normalizeRoomName(roomName) {
-  // Loại bỏ "P. " và chuẩn hóa tên phòng
-  return roomName
-    .replace(/^(P\.|Phòng)\s*/i, "")
-    .trim()
-    .toLowerCase();
+function normalizeRoomName(roomname) {
+  if (!roomname) return "";
+  return String(roomname)
+    .toLowerCase()
+    .replace(
+      /[^a-z0-9àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ\s]/g,
+      ""
+    )
+    .replace(/\s+/g, " ")
+    .replace(/(p\.?|phòng)\s*/g, "phòng ")
+    .replace(/(lau|lầu)/g, "lầu")
+    .trim();
 }
 
 //===New version : Update thểm cả giây vì nếu so sánh mỗi phút thì sẽ sau 1 phút thì mới nhảy kết quả
@@ -2164,12 +2188,12 @@ function loadDynamicPage(pageType) {
     let roomKeyword, roomName;
     switch (pageType) {
       case "room1":
-        roomKeyword = "Phòng họp lầu 3"; // Updated from "Lotus"
-        roomName = "Phòng họp lầu 3"; // Updated from "Lotus"
+        roomKeyword = "Phòng họp lầu 3";
+        roomName = "Phòng họp lầu 3";
         break;
       case "room2":
-        roomKeyword = "Phòng họp lầu 4"; // Updated from "lavender-1"
-        roomName = "Phòng họp lầu 4"; // Updated from "Lavender-1"
+        roomKeyword = "Phòng họp lầu 4";
+        roomName = "Phòng họp lầu 4";
         break;
       default:
         console.error("Unknown room type:", pageType);
