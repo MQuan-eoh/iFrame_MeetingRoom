@@ -3687,6 +3687,17 @@ button:hover {
   .background-management > *:not(.settings-icon) {
     display: none !important;
   }
+  /* KHÔNG ẩn .settings-content! */
+  /* .background-management > *:not(.settings-icon) { display: none !important; } */
+  /* Nếu muốn ẩn các phần khác, chỉ ẩn các container upload/reset, KHÔNG ẩn .settings-content */
+  .background-management > .main-bg-container,
+  .background-management > .schedule-bg-container,
+  .background-management > .reset-background-button {
+    display: none !important;
+  }
+  .settings-content.active {
+    z-index: 10001 !important;
+  }
 }
 
 @media (max-width: 600px) {
