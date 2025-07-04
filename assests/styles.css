@@ -3652,14 +3652,6 @@ button:hover {
 }
 
 @media (max-width: 600px) {
-  html,
-  body,
-  .meeting-page,
-  .content-wrapper {
-    height: 100vh !important;
-    min-height: 100vh !important;
-    overflow: hidden !important;
-  }
   .fullscreen-toggle {
     display: block !important;
     position: fixed !important;
