@@ -3643,15 +3643,28 @@ button:hover {
   .content-wrapper {
     height: 100vh !important;
     min-height: 100vh !important;
-    overflow: auto !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
   }
-  .schedule-section {
-    min-height: 200px !important;
+  .content-wrapper,
+  .schedule-section,
+  .schedule-content {
     height: auto !important;
+    min-height: unset !important;
+    max-height: unset !important;
+    overflow: visible !important;
   }
 }
 
 @media (max-width: 600px) {
+  html,
+  body,
+  .meeting-page,
+  .content-wrapper {
+    height: 100vh !important;
+    min-height: 100vh !important;
+    overflow: hidden !important;
+  }
   .fullscreen-toggle {
     display: block !important;
     position: fixed !important;

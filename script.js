@@ -2979,3 +2979,10 @@ document.addEventListener("click", function (e) {
     settingsContent.classList.add("hidden");
   }
 });
+
+
+
+
+
+
+
