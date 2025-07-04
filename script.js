@@ -2961,3 +2961,21 @@ document.querySelector(".settings-icon").addEventListener("click", function () {
   document.querySelector(".settings-content").classList.toggle("active");
   document.querySelector(".settings-content").classList.toggle("hidden");
 });
+
+document
+  .querySelector(".settings-icon")
+  .addEventListener("click", function (e) {
+    e.stopPropagation();
+    var settingsContent = document.querySelector(".settings-content");
+    settingsContent.classList.toggle("active");
+    settingsContent.classList.toggle("hidden");
+  });
+
+// Đóng khi click ra ngoài
+document.addEventListener("click", function (e) {
+  var settingsContent = document.querySelector(".settings-content");
+  if (settingsContent.classList.contains("active")) {
+    settingsContent.classList.remove("active");
+    settingsContent.classList.add("hidden");
+  }
+});
