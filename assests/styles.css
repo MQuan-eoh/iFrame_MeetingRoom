@@ -2712,6 +2712,7 @@ schedule-table {
   .room-button {
     min-width: 110px;
     padding: 8px;
+    margin-bottom: 40px;
   }
   .current-date {
     margin-left: 20%;
