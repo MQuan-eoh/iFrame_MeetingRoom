@@ -2389,11 +2389,18 @@ schedule-table {
 @media (max-width: 600px) {
   .content-wrapper {
     flex-direction: column !important;
+    gap: 4px !important;
+    padding: 4px !important;
+    min-width: 100vw !important;
+    max-width: 100vw !important;
+    overflow-x: hidden !important;
+    height: auto !important;
   }
   .left-column {
     order: 1 !important;
     width: 100% !important;
     padding: 4px !important;
+    margin: 0 !important;
   }
   .right-column {
     order: 2 !important;
@@ -2421,6 +2428,32 @@ schedule-table {
     height: auto !important;
     min-height: 100vh !important;
   }
+  /* Đưa settings-icon lên góc trên cùng bên trái, KHÔNG ẩn các phần tử con */
+  .background-management {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    padding: 4px !important;
+    margin: 0 !important;
+    z-index: 10000 !important;
+    width: auto !important;
+    background: none !important;
+    box-shadow: none !important;
+    flex-direction: row !important;
+    align-items: flex-start !important;
+    gap: 0 !important;
+  }
+  .settings-icon {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 38px !important;
+    height: 38px !important;
+    font-size: 22px !important;
+    background: rgba(0,0,0,0.5) !important;
+    border-radius: 50% !important;
+    box-shadow: none !important;
+  }
+  /* KHÔNG ẩn các phần tử con của .background-management để JS vẫn hoạt động */
 }
 
 @media (max-width: 480px) {

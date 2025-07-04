@@ -2956,3 +2956,8 @@ const PeopleDetectionSystem = {
     dot.classList.add("status-update");
   },
 };
+
+document.querySelector(".settings-icon").addEventListener("click", function () {
+  document.querySelector(".settings-content").classList.toggle("active");
+  document.querySelector(".settings-content").classList.toggle("hidden");
+});
