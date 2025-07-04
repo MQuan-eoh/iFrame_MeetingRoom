@@ -2448,7 +2448,7 @@ let configTemp = null,
   configPeopleDetection2 = null;
 
 eraWidget.init({
-  mobileHeight: 700,
+  mobileHeight: 1500,
   onConfiguration: (configuration) => {
     // Lưu các cấu hình khi nhận được từ widget
     configTemp = configuration.realtime_configs[0];
