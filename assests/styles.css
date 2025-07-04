@@ -3728,3 +3728,9 @@ button:hover {
     margin-left: 4px !important;
   }
 }
+
+@media (min-height: 900px) {
+  .room-buttons {
+    margin-bottom: 40px;
+  }
+}
