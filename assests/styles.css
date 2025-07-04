@@ -3729,7 +3729,7 @@ button:hover {
   }
 }
 
-@media (min-height: 900px) {
+@media (min-width: 900px) {
   .room-buttons {
     margin-bottom: 40px;
   }
