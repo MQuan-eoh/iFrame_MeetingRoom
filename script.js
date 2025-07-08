@@ -1823,7 +1823,7 @@ function renderRoomPage(data, roomKeyword, roomName) {
     return meetingDate.toDateString() === today.toDateString();
   });
   console.log("Today's meetings:", filteredData);
-
+  const safeData = Array.isArray(data) ? data : [];
   const roomKey = normalizeRoomKey(roomKeyword);
   const eraSuffix = roomEraMap[roomKey];
   const normalizedRoomKey = roomKey.toLowerCase();
@@ -2177,12 +2177,14 @@ function loadDynamicPage(pageType) {
 
   try {
     const cachedData = localStorage.getItem("fileCache");
+
     if (!cachedData) {
-      console.error("No cached data found!");
+      console.error("No cached data found! Loading default template.");
+      dynamicContent.innerHTML = renderRoomPage([], "", roomName);
       return;
     }
-
-    const data = JSON.parse(cachedData).data;
+    const parsed = JSON.parse(cachedData);
+    const data = Array.isArray(parsed?.data) ? parsed.data : [];
     console.log("Loaded data from cache:", data);
 
     let roomKeyword, roomName;
@@ -2239,6 +2241,8 @@ function loadDynamicPage(pageType) {
     }
   } catch (error) {
     console.error("Error loading dynamic page:", error);
+    // Fallback to empty data
+    dynamicContent.innerHTML = renderRoomPage([], "", roomName);
   }
 }
 
@@ -2448,7 +2452,6 @@ let configTemp = null,
   configPeopleDetection2 = null;
 
 eraWidget.init({
-  mobileHeight: 600,
   onConfiguration: (configuration) => {
     // Lưu các cấu hình khi nhận được từ widget
     configTemp = configuration.realtime_configs[0];
@@ -2956,33 +2959,3 @@ const PeopleDetectionSystem = {
     dot.classList.add("status-update");
   },
 };
-
-document.querySelector(".settings-icon").addEventListener("click", function () {
-  document.querySelector(".settings-content").classList.toggle("active");
-  document.querySelector(".settings-content").classList.toggle("hidden");
-});
-
-document
-  .querySelector(".settings-icon")
-  .addEventListener("click", function (e) {
-    e.stopPropagation();
-    var settingsContent = document.querySelector(".settings-content");
-    settingsContent.classList.toggle("active");
-    settingsContent.classList.toggle("hidden");
-  });
-
-// Đóng khi click ra ngoài
-document.addEventListener("click", function (e) {
-  var settingsContent = document.querySelector(".settings-content");
-  if (settingsContent.classList.contains("active")) {
-    settingsContent.classList.remove("active");
-    settingsContent.classList.add("hidden");
-  }
-});
-
-
-
-
-
-
-
