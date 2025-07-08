@@ -563,29 +563,6 @@ async function handleFileUpload(file) {
 
   try {
     updateProgress(10, "Đang khởi tạo...");
-
-    // try {
-    //   updateProgress(20, "Đang đọc file...");
-    //   const handles = await window.showOpenFilePicker({
-    //     multiple: false,
-    //     types: [
-    //       {
-    //         description: "Excel Files",
-    //         accept: {
-    //           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
-    //             [".xlsx"],
-    //           "application/vnd.ms-excel": [".xls"],
-    //         },
-    //       },
-    //     ],
-    //   });
-    //   fileHandle = handles[0];
-    //   const initialFile = await fileHandle.getFile();
-    //   lastFileData = await initialFile.text();
-    // } catch (error) {
-    //   console.error("Không thể lấy file handle:", error);
-    // }
-
     updateProgress(40, "Đang xử lý dữ liệu...");
     const data = await processExcelFile(file);
 
@@ -632,14 +609,11 @@ async function handleFileUpload(file) {
     startAutoUpdate(mergedData);
 
     updateProgress(80, "Đang lưu cache...");
-    // fileCache.data = mergedData;
-    // fileCache.lastModified = new Date().getTime();
-
     localStorage.setItem(
       "fileCache",
       JSON.stringify({
-        data: fileCache.data,
-        lastModified: fileCache.lastModified,
+        data: mergedData, //Must be an merged data
+        lastModified: new Date().getTime(),
       })
     );
 
@@ -1317,6 +1291,9 @@ function normalizeRoomName(roomname) {
     .replace(/(lau|lầu)/g, "lầu")
     .trim();
 }
+function normalizeRoomName(name) {
+  return name.toLowerCase().replace(/\s+/g, " ").trim();
+}
 
 //===New version : Update thểm cả giây vì nếu so sánh mỗi phút thì sẽ sau 1 phút thì mới nhảy kết quả
 function getCurrentTime() {
@@ -1519,8 +1496,8 @@ async function checkFileChanges() {
       localStorage.setItem(
         "fileCache",
         JSON.stringify({
-          data: mergedData,
-          lastModified: fileCache.lastModified,
+          data: mergedData, // PHẢI là mergedData, không phải fileCache.data
+          lastModified: new Date().getTime(),
         })
       );
       updateProgress(95, "Đang lưu bộ nhớ đệm...");
@@ -1809,10 +1786,26 @@ function renderRoomPage(data, roomKeyword, roomName) {
     roomKeyword,
     roomName,
   });
+
+  console.log(
+    "Data received:",
+    data.map((m) => m.room)
+  );
+  console.log(
+    "roomKeyword:",
+    roomKeyword,
+    "normalized:",
+    normalizeRoomKey(roomKeyword)
+  );
+  console.log(
+    "All normalized meeting rooms:",
+    data.map((m) => normalizeRoomKey(m.room))
+  );
+
   // Lọc các cuộc họp cho phòng
-  const roomMeetings = data.filter((meeting) =>
-    // meeting.room.toLowerCase().includes(roomKeyword.toLowerCase())
-    meeting.room.toLowerCase().replace(/\s+/g, "-")
+  const roomMeetings = data.filter(
+    (meeting) =>
+      normalizeRoomKey(meeting.room) === normalizeRoomKey(roomKeyword)
   );
   console.log("Filtered room meetings:", roomMeetings);
 
@@ -1823,7 +1816,7 @@ function renderRoomPage(data, roomKeyword, roomName) {
     return meetingDate.toDateString() === today.toDateString();
   });
   console.log("Today's meetings:", filteredData);
-  const safeData = Array.isArray(data) ? data : [];
+
   const roomKey = normalizeRoomKey(roomKeyword);
   const eraSuffix = roomEraMap[roomKey];
   const normalizedRoomKey = roomKey.toLowerCase();
@@ -2163,7 +2156,6 @@ function renderRoomPage(data, roomKeyword, roomName) {
   return template;
 }
 
-// Hàm chính để load trang động
 function loadDynamicPage(pageType) {
   console.log("Loading dynamic page for:", pageType);
 
@@ -2177,12 +2169,11 @@ function loadDynamicPage(pageType) {
 
   try {
     const cachedData = localStorage.getItem("fileCache");
-
     if (!cachedData) {
-      console.error("No cached data found! Loading default template.");
-      dynamicContent.innerHTML = renderRoomPage([], "", roomName);
+      console.error("No cached data found!");
       return;
     }
+
     const parsed = JSON.parse(cachedData);
     const data = Array.isArray(parsed?.data) ? parsed.data : [];
     console.log("Loaded data from cache:", data);
@@ -2241,8 +2232,6 @@ function loadDynamicPage(pageType) {
     }
   } catch (error) {
     console.error("Error loading dynamic page:", error);
-    // Fallback to empty data
-    dynamicContent.innerHTML = renderRoomPage([], "", roomName);
   }
 }
 
@@ -2300,8 +2289,7 @@ function handleEndMeeting(event) {
   // Tìm cuộc họp hiện tại
   const roomMeetings = data.filter(
     (meeting) =>
-      meeting.room.toLowerCase().replace(/\s+/g, "-") &&
-      meeting.date === currentDate
+      normalizeRoomKey(meeting.room) === normalizeRoomKey(roomKeyword)
   );
 
   const currentMeeting = roomMeetings.find((meeting) =>
@@ -2332,8 +2320,8 @@ function handleEndMeeting(event) {
       localStorage.setItem(
         "fileCache",
         JSON.stringify({
-          data: updatedData,
-          lastModified: fileCache.lastModified,
+          data: mergedData, // PHẢI là mergedData, không phải fileCache.data
+          lastModified: new Date().getTime(),
         })
       );
 
@@ -2666,12 +2654,8 @@ function updateACStatus(container, room) {
       console.log(`[DEBUG] Power consumption for ${room}: ${currentPower}W`);
 
       // Determine AC state based on multiple factors
-      const isPowerOn = currentPower > 0.5; // Hardware is consuming power
-      const isLogicallyOn = acStates[roomKey]?.isOn || false; // Software state
-
-      // Priority logic: Use power consumption as primary indicator
       // but also consider software state for immediate feedback
-      const isActuallyRunning = isLogicallyOn || isPowerOn;
+      const isActuallyRunning = acStates[roomKey]?.isOn || currentPower > 0.5;
 
       // Update internal state
       acStates[roomKey].isOn = isActuallyRunning;
@@ -2937,7 +2921,7 @@ const PeopleDetectionSystem = {
 
       // Add animation
       dot.classList.remove("status-update");
-      void dot.offsetWidth; // Force reflow
+      void dot.offsetWidth; // Trigger reflow
       dot.classList.add("status-update");
 
       console.log(`Updated ${room} status text to: ${statusText.textContent}`);
