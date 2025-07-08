@@ -180,14 +180,11 @@ function formatDuration(duration) {
 // Hàm xác định mục đích sử dụng
 function determinePurpose(content) {
   if (!content) return "Khác";
-
   const contentLower = String(content).toLowerCase();
-
   if (contentLower.includes("họp")) return "Họp";
   if (contentLower.includes("đào tạo")) return "Đào tạo";
   if (contentLower.includes("phỏng vấn") || contentLower.includes("pv"))
     return "Phỏng vấn";
-
   return "Khác";
 }
 
@@ -357,7 +354,7 @@ function formatDate(dateInput) {
       }
     }
 
-    // Xử lý số serial từ Excel (nếu không dùng cellDates: true)
+    //Processing numeric date values (Excel serial date)
     if (typeof dateInput === "number" || !isNaN(Number(dateInput))) {
       const numDate = Number(dateInput);
       // Excel bắt đầu từ 1/1/1900, và trừ đi 2 để điều chỉnh lỗi năm nhuận
