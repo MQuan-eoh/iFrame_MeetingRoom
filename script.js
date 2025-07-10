@@ -2750,6 +2750,10 @@ function updatePeopleStatus(room, value) {
   const roomKey = normalizeRoomKey(room);
   const isEmpty = value === 1;
 
+  const peopleDetectionStates = {
+    "phòng họp lầu 3": { isEmpty: true },
+    "phòng họp lầu 4": { isEmpty: true },
+  };
   if (peopleDetectionStates[roomKey].isEmpty !== isEmpty) {
     peopleDetectionStates[roomKey].isEmpty = isEmpty;
 
