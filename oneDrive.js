@@ -48,7 +48,7 @@ class OneDriveSync {
           clientId: this.config.clientId,
           redirectUri: this.config.redirectUri,
           //Change authority to consumer for personal accounts
-          authority: "https://login.microsoftonline.com/consumers",
+          authority: "https://login.microsoftonline.com/common",
           navigateToLoginRequestUrl: true,
           postLogoutRedirectUri: this.config.redirectUri,
         },
