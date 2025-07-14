@@ -3166,52 +3166,6 @@ function showOneDriveNotification(message, isError = false) {
   }, 3000);
 }
 
-// Add CSS for the notification
-const oneDriveStyle = document.createElement("style");
-oneDriveStyle.textContent = `
-  .onedrive-sync-notification {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    background-color: #0078d4;
-    color: white;
-    padding: 12px 20px;
-    border-radius: 6px;
-    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-weight: 500;
-    z-index: 9999;
-    animation: slideIn 0.3s ease-out;
-    transition: opacity 0.3s ease-out, transform 0.3s ease-out;
-  }
-  
-  .onedrive-sync-notification.error {
-    background-color: #d83b01;
-  }
-  
-  .onedrive-sync-notification.hide {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  
-  .onedrive-sync-notification i {
-    font-size: 18px;
-  }
-  
-  @keyframes slideIn {
-    from {
-      transform: translateY(20px);
-      opacity: 0;
-    }
-    to {
-      transform: translateY(0);
-      opacity: 1;
-    }
-  }
-`;
-document.head.appendChild(oneDriveStyle);
 // Add this function to your existing document.addEventListener("DOMContentLoaded",...) block
 
 function addOneDriveSyncUI() {
