@@ -509,6 +509,7 @@ function hideProgressBar() {
 
 // Event listener for the upload button
 document.addEventListener("DOMContentLoaded", function () {
+  PeopleDetectionSystem.initialize();
   const uploadButton = document.querySelector(".upload-button");
   showProgressBar();
   uploadButton.addEventListener("click", async function (event) {
@@ -2454,11 +2455,7 @@ eraWidget.init({
     configPeopleDetection2 = configuration.realtime_configs[9];
     configAirConditioner2 = configuration.realtime_configs[10];
     // People detection sensors
-    configPeopleDetection2 = configuration.realtime_configs[11];
     configAirConditioner2 = configuration.realtime_configs[12];
-    // People detection sensors
-    configPeopleDetection2 = configuration.realtime_configs[13];
-
     acActions["Phòng họp lầu 3"].on = configuration.actions[0];
     acActions["Phòng họp lầu 3"].off = configuration.actions[1];
 
@@ -2764,8 +2761,11 @@ function updatePeopleStatus(room, value) {
       const statusText = peopleIndicator?.querySelector(".people-status-text");
 
       if (peopleDot && statusText) {
-        peopleDot.classList.toggle("occupied", !isEmpty);
+        // Update status text using textContent
         statusText.textContent = isEmpty ? "Phòng trống" : "Có người";
+
+        // Update dot color
+        dot.style.backgroundColor = isEmpty ? "#4CAF50" : "#ff0000";
 
         // Add animation
         peopleDot.classList.add("status-update");
@@ -2817,7 +2817,7 @@ const PeopleDetectionSystem = {
   // Configuration mapping
   config: {
     "Phòng họp lầu 3": { sensorId: 4 },
-    "Phòng họp lầu 4": { sensorId: 16 },
+    "Phòng họp lầu 4": { sensorId: 9 },
   },
 
   // Room name normalization
@@ -2877,7 +2877,7 @@ const PeopleDetectionSystem = {
   },
 
   updateStatus(roomKey, value) {
-    let isEmpty = value === 1; // Assuming 1 means empty, 0 means occupied
+    let isEmpty = value === 0; // Assuming 1 means empty, 0 means occupied
     console.log(`People detection update for ${roomKey}: ${value}`);
     // Convert sensor value to room status (0 = occupied, 1 = empty)
     const roomMap = {
