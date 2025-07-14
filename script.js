@@ -72,10 +72,9 @@ function formatTime(timeStr) {
   return "";
 }
 
-// Cập nhật hàm isTimeInRange để xử lý giây
 function isTimeInRange(currentTime, startTime, endTime) {
   const current = timeToMinutes(currentTime);
-  // Thêm :00 cho giây
+
   const start = timeToMinutes(`${startTime}:00`);
   const end = timeToMinutes(`${endTime}:00`);
   return current >= start && current <= end;
@@ -105,11 +104,9 @@ function formatDayOfWeek(day) {
   return dayMap[normalizedDay] || day;
 }
 
-// Hàm format tên phòng
 function formatRoomName(room) {
   if (!room) return "";
 
-  // Chuẩn hóa tên phòng - xử lý cả viết tắt
   const normalized = String(room)
     .toLowerCase()
     .replace(
@@ -117,13 +114,12 @@ function formatRoomName(room) {
       ""
     )
     .replace(/\s+/g, " ")
-    .replace(/(p\.?|phòng)\s*/g, "phòng ") // Chuẩn hóa phần "P." hoặc "Phòng"
+    .replace(/(p\.?|phòng)\s*/g, "phòng ")
     .replace(/(lau|lầu)/g, "lầu")
     .trim();
 
-  console.log(`Formatting room: ${room} -> ${normalized}`); // Log để debug
+  console.log(`Formatting room: ${room} -> ${normalized}`);
 
-  // Ánh xạ tên chuẩn
   const mapping = {
     "phòng họp lầu 3": "Phòng họp lầu 3",
     "phòng họp lầu 4": "Phòng họp lầu 4",
@@ -135,7 +131,6 @@ function formatRoomName(room) {
   return mapping[normalized] || room;
 }
 
-// Hàm format thời gian sử dụng
 function formatDuration(duration) {
   if (!duration) return "";
 
@@ -177,7 +172,6 @@ function formatDuration(duration) {
   return "";
 }
 
-// Hàm xác định mục đích sử dụng
 function determinePurpose(content) {
   if (!content) return "Khác";
   const contentLower = String(content).toLowerCase();
@@ -327,7 +321,6 @@ function formatDate(dateInput) {
   if (!dateInput) return "";
 
   try {
-    // Xử lý Date object từ Excel (do cellDates: true)
     if (dateInput instanceof Date) {
       if (!isNaN(dateInput.getTime())) {
         const adjustedDate = new Date(dateInput);
@@ -341,7 +334,7 @@ function formatDate(dateInput) {
         )}/${year}`;
       }
     }
-    // Xử lý chuỗi ngày đã được format sẵn dd/mm/yyyy
+
     if (typeof dateInput === "string") {
       const dateStr = dateInput.trim();
       const match = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
@@ -442,23 +435,65 @@ function calculateDuration(startTime, endTime) {
 
   return `${hours}:${String(minutes).padStart(2, "0")}`;
 }
-// Cập nhật bảng lịch
+
 function updateScheduleTable(data) {
   const tableBody = document.querySelector(".schedule-table");
   const headerRow = tableBody.querySelector(".table-header");
-  updateProgress(40, "Đang đồng bộ hóa dữ liệu...");
-  // Xóa các hàng cũ
+  updateProgress(40, "Synchronizing data...");
+
+  // Remove old rows
   Array.from(tableBody.children)
     .filter((child) => child !== headerRow)
     .forEach((child) => child.remove());
 
-  // Thêm dữ liệu mới
+  // If no data, show an empty state row
+  if (!data || data.length === 0) {
+    const emptyRow = document.createElement("div");
+    emptyRow.className = "table-row empty-state";
+    emptyRow.setAttribute("role", "row");
+
+    // Fix: Instead of using colspan which doesn't work with grid layouts,
+    // create a proper full-width cell that spans across the entire row
+    emptyRow.innerHTML = `
+      <div role="cell" class="empty-message">No meetings scheduled for today.</div>
+    `;
+    tableBody.appendChild(emptyRow);
+
+    // Add specific styling for this empty message cell
+    const style = document.createElement("style");
+    style.textContent = `
+      .table-row.empty-state {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100px;
+        min-width:180px;
+        background-color: rgba(245, 245, 245, 0.8);
+      }
+      
+      .empty-message {
+        text-align: center;
+        width: 100%;
+        min-width: 380px !important;
+        padding: 20px;
+        color: #666;
+        font-style: italic;
+        font-size: 16px;
+      }
+    `;
+    document.head.appendChild(style);
+
+    updateProgress(100, "Update complete");
+    hideProgressBar();
+    return;
+  }
+  // Add new data
   data.forEach((meeting) => {
     const row = document.createElement("div");
     row.className = "table-row";
     row.setAttribute("role", "row");
-    updateProgress(70, "Đang cập nhật dữ liệu...");
-    console.log("Đang cập nhật dữ liệu với processing bar");
+    updateProgress(70, "Updating data...");
+    console.log("Updating data with processing bar");
     row.innerHTML = `
             <div role="cell">${meeting.id}</div>
             <div role="cell">${meeting.date}</div>
@@ -471,12 +506,12 @@ function updateScheduleTable(data) {
             <div role="cell">${meeting.content}</div>
         `;
     tableBody.appendChild(row);
-    updateProgress(100, "Cập nhật thành công");
-    console.log("Đồng bộ hóa dữ liệu thành công ! ");
+    updateProgress(100, "Update successful");
+    console.log("Data synchronized successfully!");
     hideProgressBar();
   });
 }
-// Sửa hàm timeToMinutes để xử lý giây
+
 function timeToMinutes(timeStr) {
   if (!timeStr) return 0;
   const parts = timeStr.split(":");
@@ -490,7 +525,6 @@ function timeToMinutes(timeStr) {
 function showProgressBar() {
   const progressContainer = document.querySelector(".window");
   if (progressContainer) {
-    //hiệu ứng cho processing bar
     progressContainer.classList.add("show");
     progressContainer.style.display = "block"; // Show the progress bar
     overlay.style.display = "block";
@@ -515,7 +549,6 @@ document.addEventListener("DOMContentLoaded", function () {
   uploadButton.addEventListener("click", async function (event) {
     event.preventDefault();
     try {
-      // Thử dùng file handle đã có
       if (fileHandle) {
         const file = await fileHandle.getFile();
         await handleFileUpload(file);
@@ -526,7 +559,6 @@ document.addEventListener("DOMContentLoaded", function () {
       fileHandle = null;
     }
 
-    // Nếu không có file handle hoặc có lỗi, tạo input mới
     const fileInput = document.createElement("input");
     fileInput.type = "file";
     fileInput.accept = ".xlsx, .xls";
@@ -554,17 +586,16 @@ document
   .getElementById("stopUploadBtn")
   .addEventListener("click", hideProgressBar);
 
-/*=================Hàm xử lý file Upload==============*/
 async function handleFileUpload(file) {
   const progressContainer = document.getElementById("progressContainer");
   const progressStatus = document.getElementById("progressStatus");
 
   try {
-    updateProgress(10, "Đang khởi tạo...");
-    updateProgress(40, "Đang xử lý dữ liệu...");
+    updateProgress(10, "Initializing...");
+    updateProgress(40, "Processing data...");
     const data = await processExcelFile(file);
 
-    // Lấy dữ liệu từ cache để merge
+    // Get data from cache to merge
     const existingCache = JSON.parse(localStorage.getItem("fileCache")) || {
       data: [],
     };
@@ -574,7 +605,7 @@ async function handleFileUpload(file) {
         )
       : [];
 
-    // // Merge dữ liệu mới với trạng thái các cuộc họp đã kết thúc
+    // Merge new data with status of ended meetings
     const mergedData = data.map((meeting) => {
       const endedMeeting = endedMeetings.find(
         (ended) =>
@@ -596,26 +627,41 @@ async function handleFileUpload(file) {
       return meeting;
     });
 
+    // Filter meetings for today
     const today = new Date();
-    const filteredData = mergedData.filter((meeting) => {
+    const todayMeetings = mergedData.filter((meeting) => {
       const meetingDate = new Date(meeting.date.split("/").reverse().join("-"));
       return meetingDate.toDateString() === today.toDateString();
     });
-    updateProgress(60, "Đang cập nhật bảng...");
-    updateScheduleTable(filteredData.length > 0 ? filteredData : mergedData);
-    updateRoomStatus(mergedData);
+
+    updateProgress(60, "Updating schedule...");
+
+    // Check if there are any meetings today
+    if (todayMeetings.length > 0) {
+      // If there are meetings today, display them
+      updateScheduleTable(todayMeetings);
+      updateRoomStatus(todayMeetings);
+    } else {
+      // If no meetings today, show empty table and display a notification
+      updateScheduleTable([]);
+      updateRoomStatus([]);
+
+      // Create and show notification popup
+      showNoMeetingsNotification();
+    }
+
     startAutoUpdate(mergedData);
 
-    updateProgress(80, "Đang lưu cache...");
+    updateProgress(80, "Saving cache...");
     localStorage.setItem(
       "fileCache",
       JSON.stringify({
-        data: mergedData, //Must be an merged data
+        data: mergedData, // Must be merged data
         lastModified: new Date().getTime(),
       })
     );
 
-    updateProgress(90, "Đang thiết lập giám sát...");
+    updateProgress(90, "Setting up monitoring...");
     if (fileHandle) {
       if (window.fileCheckInterval) {
         clearInterval(window.fileCheckInterval);
@@ -623,7 +669,7 @@ async function handleFileUpload(file) {
       window.fileCheckInterval = setInterval(checkFileChanges, 5000);
     }
 
-    updateProgress(100, "Hoàn thành!");
+    updateProgress(100, "Complete!");
     hideProgressBar();
 
     setTimeout(() => {
@@ -631,19 +677,70 @@ async function handleFileUpload(file) {
       progressContainer.classList.remove("upload-complete");
     }, 2000);
   } catch (error) {
-    console.error("Lỗi xử lý file:", error);
-    progressStatus.textContent = "Tải lên thất bại!";
+    console.error("Error processing file:", error);
+    progressStatus.textContent = "Upload failed!";
     progressStatus.style.color = "#f44336";
 
     setTimeout(() => {
       progressContainer.style.display = "none";
     }, 2000);
 
-    alert("Lỗi khi xử lý file. Vui lòng thử lại.");
+    alert("Error processing file. Please try again.");
   }
 }
 
-// Tải file lên server
+// New function to show notification for no meetings
+function showNoMeetingsNotification() {
+  // Create notification element
+  const notification = document.createElement("div");
+  notification.className = "no-meetings-notification";
+  notification.textContent = "HÔM NAY CHƯA CÓ LỊCH HỌP";
+  notification.style.cssText = `
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 20px 30px;
+    border-radius: 10px;
+    font-size: 18px;
+    font-weight: bold;
+    z-index: 1000;
+    animation: fadeIn 0.3s ease-out;
+  `;
+
+  // Add animation styles
+  const styleEl = document.createElement("style");
+  styleEl.textContent = `
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes fadeOut {
+      from { opacity: 1; }
+      to { opacity: 0; }
+    }
+    .no-meetings-notification.hiding {
+      animation: fadeOut 0.3s ease-in forwards;
+    }
+  `;
+  document.head.appendChild(styleEl);
+
+  // Add to document
+  document.body.appendChild(notification);
+
+  // Remove after 2 seconds
+  setTimeout(() => {
+    notification.classList.add("hiding");
+    setTimeout(() => {
+      if (notification.parentNode) {
+        notification.parentNode.removeChild(notification);
+      }
+    }, 300);
+  }, 2000);
+}
+
 async function uploadToServer(file, processedData) {
   const formData = new FormData();
   formData.append("meetingFile", file);
@@ -704,10 +801,9 @@ function updateClock() {
 
   const currentDateElement = document.querySelector(".current-date");
   if (currentDateElement) {
-    /*currentDateElement.textContent = "Thứ 2, \n10/12/2024";*/
-    currentDateElement.style.fontSize = "15px"; // Thay đổi kích thước font
-    currentDateElement.style.color = "#ffffff"; // Thay đổi màu chữ
-    currentDateElement.style.fontWeight = "bold"; // Đậm chữ
+    currentDateElement.style.fontSize = "15px";
+    currentDateElement.style.color = "#ffffff";
+    currentDateElement.style.fontWeight = "bold";
     currentDateElement.style.paddingRight = "25px";
   }
 }
@@ -738,18 +834,15 @@ function updateDate() {
   }
 }
 
-// Cập nhật thời gian thực mỗi giây
 setInterval(updateDate, 1000);
 
-// Hiển thị ngày ngay khi tải trang
 updateDate();
 
-// Khởi tạo đồng hồ và cập nhật mỗi giây
 function initClock() {
-  updateClock(); // Cập nhật ngay lập tức
-  setInterval(updateClock, 1000); // Cập nhật mỗi giây
+  updateClock();
+  setInterval(updateClock, 1000);
 }
-// Hàm kiểm tra xung đột thời gian giữa các cuộc họp
+
 function checkTimeConflict(meeting1, meeting2) {
   const start1 = timeToMinutes(meeting1.startTime);
   const end1 = timeToMinutes(meeting1.endTime);
@@ -758,7 +851,6 @@ function checkTimeConflict(meeting1, meeting2) {
   return start1 < end2 && start2 < end1;
 }
 
-// Hàm kiểm tra xung đột lịch họp
 async function validateMeetings(meetings) {
   const conflicts = [];
   const processedMeetings = new Set();
@@ -767,7 +859,6 @@ async function validateMeetings(meetings) {
     const currentMeeting = meetings[i];
     const key = `${currentMeeting.date}_${currentMeeting.room}`;
 
-    // Kiểm tra với các cuộc họp khác cùng ngày và cùng phòng
     for (let j = 0; j < meetings.length; j++) {
       if (i === j) continue;
       const otherMeeting = meetings[j];
@@ -810,15 +901,12 @@ function checkTimeConflict(meeting1, meeting2) {
   const start2 = timeToMinutes(meeting2.startTime);
   const end2 = timeToMinutes(meeting2.endTime);
 
-  // Kiểm tra xem hai khoảng thời gian có giao nhau không
   return start1 < end2 && start2 < end1;
 }
 
-// Hàm kiểm tra xung đột cho một cuộc họp mới
 function validateNewMeeting(newMeeting, existingMeetings) {
   const conflicts = [];
 
-  // Chỉ kiểm tra các cuộc họp cùng ngày và cùng phòng
   const relevantMeetings = existingMeetings.filter(
     (meeting) =>
       meeting.date === newMeeting.date &&
@@ -846,9 +934,7 @@ function validateNewMeeting(newMeeting, existingMeetings) {
   };
 }
 
-// Hàm hiển thị modal thông báo lỗi
 function showErrorModal(message) {
-  // Tạo modal container
   const modalContainer = document.createElement("div");
   modalContainer.className = "error-modal-container";
   modalContainer.style.cssText = `
@@ -864,7 +950,6 @@ function showErrorModal(message) {
     z-index: 1000;
   `;
 
-  // Tạo modal content
   const modalContent = document.createElement("div");
   modalContent.className = "error-modal-content";
   modalContent.style.cssText = `
@@ -877,18 +962,15 @@ function showErrorModal(message) {
     position: relative;
   `;
 
-  // Tạo tiêu đề
   const title = document.createElement("h3");
   title.textContent = "Lỗi Xung Đột Lịch Họp";
   title.style.color = "#dc3545";
 
-  // Tạo nội dung
   const content = document.createElement("pre");
   content.textContent = message;
   content.style.whiteSpace = "pre-wrap";
   content.style.marginTop = "10px";
 
-  // Tạo nút đóng
   const closeButton = document.createElement("button");
   closeButton.textContent = "Đóng";
   closeButton.style.cssText = `
@@ -902,7 +984,6 @@ function showErrorModal(message) {
   `;
   closeButton.onclick = () => modalContainer.remove();
 
-  // Ghép các phần tử
   modalContent.appendChild(title);
   modalContent.appendChild(content);
   modalContent.appendChild(closeButton);
@@ -912,7 +993,6 @@ function showErrorModal(message) {
 
 /*======Change Background Feature========= */
 document.addEventListener("DOMContentLoaded", function () {
-  // Khai báo các elements
   const elements = {
     settingsIcon: document.querySelector(".settings-icon"),
     settingsContent: document.querySelector(".settings-content"),
@@ -1142,7 +1222,6 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  // Xử lý upload background chính
   mainBackgroundUploadBtn.addEventListener("click", function () {
     mainBackgroundUploadInput.click();
   });
@@ -1158,7 +1237,6 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   });
 
-  // Xử lý upload background lịch
   scheduleBackgroundUploadBtn.addEventListener("click", function () {
     scheduleBackgroundUploadInput.click();
   });
@@ -1228,7 +1306,6 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   });
 
-  // Kiểm tra và áp dụng background từ localStorage khi tải trang
   function applyStoredBackgrounds() {
     const savedMainBackground = localStorage.getItem("customMainBackground");
     const savedScheduleBackground = localStorage.getItem(
@@ -1248,7 +1325,6 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
-  // Gọi hàm áp dụng background
   applyStoredBackgrounds();
 });
 
@@ -1262,6 +1338,7 @@ function updateRoomStatus(data) {
   console.log("Current date:", currentDate);
   console.log("Current time:", currentTime);
 
+  // Filter for today's meetings
   const todayMeetings = data.filter((meeting) => {
     const isToday = meeting.date === currentDate;
     console.log(`Meeting date: ${meeting.date}, Is today: ${isToday}`);
@@ -1272,10 +1349,43 @@ function updateRoomStatus(data) {
 
   const roomsToUpdate = ["Phòng họp lầu 4", "Phòng họp lầu 3"];
   roomsToUpdate.forEach((roomName) => {
-    updateSingleRoomStatus(roomName, todayMeetings, currentTime);
+    // If no data or empty data, pass empty array to indicate no meetings
+    if (!data || data.length === 0) {
+      updateSingleRoomStatus(roomName, [], currentTime);
+    } else {
+      updateSingleRoomStatus(roomName, todayMeetings, currentTime);
+    }
   });
 }
-
+// Add this to your existing style element or create a new one
+const additionalStyles = document.createElement("style");
+additionalStyles.textContent = `
+  .table-row.empty-state {
+    background-color: rgba(245, 245, 245, 0.8);
+    font-style: italic;
+  }
+  
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  
+  @keyframes fadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+  
+  .no-meetings-notification {
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    letter-spacing: 1px;
+    text-align: center;
+  }
+  
+  .no-meetings-notification.hiding {
+    animation: fadeOut 0.3s ease-in forwards;
+  }
+`;
+document.head.appendChild(additionalStyles);
 function normalizeRoomName(roomname) {
   if (!roomname) return "";
   return String(roomname)
@@ -1293,7 +1403,6 @@ function normalizeRoomName(name) {
   return name.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
-//===New version : Update thểm cả giây vì nếu so sánh mỗi phút thì sẽ sau 1 phút thì mới nhảy kết quả
 function getCurrentTime() {
   const now = new Date();
   return `${String(now.getHours()).padStart(2, "0")}:${String(
@@ -1301,7 +1410,6 @@ function getCurrentTime() {
   ).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
 }
 
-// Sửa hàm isTimeOverdue để có độ chính xác cao hơn
 function isTimeOverdue(endTime, currentTime) {
   const endTimeParts = endTime.split(":");
   const endTimeWithSeconds = `${endTimeParts[0]}:${endTimeParts[1]}:00`;
@@ -1317,7 +1425,7 @@ function isTimeOverdue(endTime, currentTime) {
   return isOverdue;
 }
 
-//=====Hàm để tự động cập nhật thời gian và trạng thái - Function related times, overdueTime=======
+//==== Function related times, overdueTime=======
 function startAutoUpdate(data) {
   updateRoomStatus(data);
   const intervalId = setInterval(() => {
@@ -1430,7 +1538,7 @@ let fileCache = {
   lastModified: null,
   reader: new FileReader(),
 };
-// Hàm kiểm tra thay đổi từ input element
+
 async function checkFileChanges() {
   if (!fileHandle) return;
 
@@ -1443,24 +1551,25 @@ async function checkFileChanges() {
       return;
     }
 
-    // Lấy dữ liệu từ cache
+    // Get data from cache
     const existingCache = JSON.parse(localStorage.getItem("fileCache")) || {
       data: [],
     };
 
-    // Lọc ra các cuộc họp đã kết thúc sớm
+    // Filter ended meetings
     const endedMeetings = existingCache.data.filter(
       (meeting) => meeting.isEnded && meeting.forceEndedByUser
     );
 
     if (fileData !== lastFileData) {
-      console.log("File đã thay đổi, đang cập nhật...");
+      console.log("File changed, updating...");
       const newData = await processExcelFile(file);
       showProgressBar();
-      updateProgress(0, "Đang đọc dữ liệu từ file...");
-      // Merge dữ liệu mới với trạng thái các cuộc họp đã kết thúc
+      updateProgress(0, "Reading data from file...");
+
+      // Merge new data with ended meetings status
       const mergedData = newData.map((meeting) => {
-        updateProgress(30, "Đang phân tích dữ liệu...");
+        updateProgress(30, "Analyzing data...");
         const endedMeeting = endedMeetings.find(
           (ended) =>
             ended.id === meeting.id &&
@@ -1469,13 +1578,15 @@ async function checkFileChanges() {
         );
 
         if (endedMeeting) {
-          // Giữ nguyên thông tin của cuộc họp đã kết thúc
+          // Keep ended meeting information
           return endedMeeting;
         }
         return meeting;
       });
-      updateProgress(60, "Đang hợp nhất với dữ liệu hiện tại...");
-      // Lọc các cuộc họp trong ngày
+
+      updateProgress(60, "Merging with current data...");
+
+      // Filter meetings for today
       const today = new Date();
       const todayMeetings = mergedData.filter((meeting) => {
         const meetingDate = new Date(
@@ -1483,10 +1594,20 @@ async function checkFileChanges() {
         );
         return meetingDate.toDateString() === today.toDateString();
       });
-      updateProgress(75, "Đang cập nhật lịch trình...");
-      // Cập nhật UI và cache
-      updateScheduleTable(todayMeetings);
-      updateRoomStatus(todayMeetings);
+
+      updateProgress(75, "Updating schedule...");
+
+      // Check if there are any meetings today
+      if (todayMeetings.length > 0) {
+        // If there are meetings today, display them
+        updateScheduleTable(todayMeetings);
+        updateRoomStatus(todayMeetings);
+      } else {
+        // If no meetings today, show empty table and display a notification
+        updateScheduleTable([]);
+        updateRoomStatus([]);
+        showNoMeetingsNotification();
+      }
 
       fileCache.data = mergedData;
       fileCache.lastModified = new Date().getTime();
@@ -1494,16 +1615,17 @@ async function checkFileChanges() {
       localStorage.setItem(
         "fileCache",
         JSON.stringify({
-          data: mergedData, // PHẢI là mergedData, không phải fileCache.data
+          data: mergedData,
           lastModified: new Date().getTime(),
         })
       );
-      updateProgress(95, "Đang lưu bộ nhớ đệm...");
+
+      updateProgress(95, "Saving cache...");
       lastFileData = fileData;
-      updateProgress(100, "Cập nhật thành công!");
+      updateProgress(100, "Update successful!");
       setTimeout(hideProgressBar, 1000);
     } else {
-      // Khi file không thay đổi, sử dụng dữ liệu từ cache
+      // When file hasn't changed, use data from cache
       const today = new Date();
       const todayMeetings = existingCache.data.filter((meeting) => {
         const meetingDate = new Date(
@@ -1512,18 +1634,20 @@ async function checkFileChanges() {
         return meetingDate.toDateString() === today.toDateString();
       });
 
-      console.log("Sử dụng dữ liệu từ cache:", todayMeetings);
-      // updateScheduleTable(todayMeetings);
+      console.log("Using data from cache:", todayMeetings);
+
+      // Only update room status, not the table
       updateRoomStatus(todayMeetings);
     }
   } catch (error) {
-    console.error("Lỗi khi kiểm tra file:", error);
+    console.error("Error checking file:", error);
     if (error.name === "NotAllowedError") {
       clearInterval(window.fileCheckInterval);
       fileHandle = null;
     }
   }
 }
+
 const overlay = document.createElement("div");
 overlay.style.position = "fixed";
 overlay.style.top = "0";
