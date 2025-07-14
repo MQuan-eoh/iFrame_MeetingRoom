@@ -40,13 +40,15 @@ class OneDriveSync {
       console.error("[Auth] Failed to check auth state:", error);
     }
   }
+
   getMsalInstance() {
     if (!this.msalInstance) {
       const msalConfig = {
         auth: {
           clientId: this.config.clientId,
           redirectUri: this.config.redirectUri,
-          authority: "https://login.microsoftonline.com/common",
+          //Change authority to consumer for personal accounts
+          authority: "https://login.microsoftonline.com/consumers",
           navigateToLoginRequestUrl: true,
           postLogoutRedirectUri: this.config.redirectUri,
         },
@@ -55,28 +57,10 @@ class OneDriveSync {
           storeAuthStateInCookie: true,
         },
         system: {
+          allowNativeBroker: false, // Disable native broker
           loggerOptions: {
-            loggerCallback: (level, message, containsPii) => {
-              if (containsPii) {
-                return;
-              }
-              switch (level) {
-                case msal.LogLevel.Error:
-                  console.error("[MSAL]", message);
-                  break;
-                case msal.LogLevel.Info:
-                  console.info("[MSAL]", message);
-                  break;
-                case msal.LogLevel.Verbose:
-                  console.debug("[MSAL]", message);
-                  break;
-                case msal.LogLevel.Warning:
-                  console.warn("[MSAL]", message);
-                  break;
-              }
-            },
-            piiLoggingEnabled: false,
             logLevel: msal.LogLevel.Verbose,
+            piiLoggingEnabled: false,
           },
         },
       };
@@ -85,6 +69,7 @@ class OneDriveSync {
     }
     return this.msalInstance;
   }
+
   // Initialize OneDrive sync
   async init(options = {}) {
     console.log("[OneDrive] Initializing OneDrive sync...");
@@ -125,64 +110,40 @@ class OneDriveSync {
     try {
       const msalInstance = this.getMsalInstance();
 
-      const accounts = msalInstance.getAllAccounts();
-      if (accounts.length > 0) {
-        //If we have an active session, try to acquire token silently
-        try {
+      // Attempt silent login first
+      try {
+        const accounts = msalInstance.getAllAccounts();
+        if (accounts.length > 0) {
           const silentRequest = {
             scopes: this.config.scopes,
             account: accounts[0],
-            forceRefresh: false,
+            prompt: "none",
           };
           const response = await msalInstance.acquireTokenSilent(silentRequest);
           this.authToken = response.accessToken;
           this.isAuthenticated = true;
           return response;
-        } catch (silentError) {
-          console.log("[Auth] Silent token acquisition failed, using popup");
         }
+      } catch (silentError) {
+        console.log("[Auth] Silent sign-in failed, trying popup", silentError);
       }
 
-      //If dont't have token, proceed with login
+      //If silent login fails, use popup login
       const loginRequest = {
         scopes: this.config.scopes,
         prompt: "select_account",
+        authority: "https://login.microsoftonline.com/consumers",
       };
-
-      // Open a popup to handle login
-      const popupWindow = window.open("", "_blank", "width=600,height=600");
-      if (!popupWindow) {
-        throw new Error(
-          "Popup was blocked. Please allow popups for this site."
-        );
-      }
-      popupWindow.close();
 
       const loginResponse = await msalInstance.loginPopup(loginRequest);
-      console.log("[Auth] Login successful", loginResponse);
 
-      //After login, acquire token silently
-      const tokenRequest = {
-        scopes: this.config.scopes,
-        account: loginResponse.account,
-      };
-
-      const tokenResponse = await msalInstance.acquireTokenSilent(tokenRequest);
-      this.authToken = tokenResponse.accessToken;
-      this.isAuthenticated = true;
-
-      localStorage.setItem("preferredUsername", loginResponse.account.username);
-      this.storeAuthToken(tokenResponse);
-
-      return loginResponse;
+      if (loginResponse) {
+        this.authToken = loginResponse.accessToken;
+        this.isAuthenticated = true;
+        return loginResponse;
+      }
     } catch (error) {
       console.error("[Auth] Login failed:", error);
-
-      if (error instanceof msal.InteractionRequiredAuthError) {
-        console.log("[Auth] Interaction required");
-      } else if (error instanceof msal.BrowserAuthError) {
-        console.log("[Auth] Browser auth error:", error.errorCode);
-      }
       throw error;
     }
   }
