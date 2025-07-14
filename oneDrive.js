@@ -47,10 +47,37 @@ class OneDriveSync {
           clientId: this.config.clientId,
           redirectUri: this.config.redirectUri,
           authority: "https://login.microsoftonline.com/common",
+          navigateToLoginRequestUrl: true,
+          postLogoutRedirectUri: this.config.redirectUri,
         },
         cache: {
-          cacheLocation: "localStorage",
+          cacheLocation: "sessionStorage",
           storeAuthStateInCookie: true,
+        },
+        system: {
+          loggerOptions: {
+            loggerCallback: (level, message, containsPii) => {
+              if (containsPii) {
+                return;
+              }
+              switch (level) {
+                case msal.LogLevel.Error:
+                  console.error("[MSAL]", message);
+                  break;
+                case msal.LogLevel.Info:
+                  console.info("[MSAL]", message);
+                  break;
+                case msal.LogLevel.Verbose:
+                  console.debug("[MSAL]", message);
+                  break;
+                case msal.LogLevel.Warning:
+                  console.warn("[MSAL]", message);
+                  break;
+              }
+            },
+            piiLoggingEnabled: false,
+            logLevel: msal.LogLevel.Verbose,
+          },
         },
       };
 
@@ -98,37 +125,67 @@ class OneDriveSync {
     try {
       const msalInstance = this.getMsalInstance();
 
-      // Thử silent login trước
-      try {
-        const silentResult = await msalInstance.ssoSilent({
-          scopes: this.config.scopes,
-          loginHint: localStorage.getItem("preferredUsername"),
-        });
-        this.authToken = silentResult.accessToken;
-        this.isAuthenticated = true;
-        return silentResult;
-      } catch (silentError) {
-        console.log("[Auth] Silent sign-in failed, trying popup:", silentError);
+      const accounts = msalInstance.getAllAccounts();
+      if (accounts.length > 0) {
+        //If we have an active session, try to acquire token silently
+        try {
+          const silentRequest = {
+            scopes: this.config.scopes,
+            account: accounts[0],
+            forceRefresh: false,
+          };
+          const response = await msalInstance.acquireTokenSilent(silentRequest);
+          this.authToken = response.accessToken;
+          this.isAuthenticated = true;
+          return response;
+        } catch (silentError) {
+          console.log("[Auth] Silent token acquisition failed, using popup");
+        }
       }
 
-      // Nếu silent login thất bại, dùng popup
-      const loginResult = await msalInstance.loginPopup({
+      //If dont't have token, proceed with login
+      const loginRequest = {
         scopes: this.config.scopes,
-      });
+        prompt: "select_account",
+      };
 
-      this.authToken = loginResult.accessToken;
+      // Open a popup to handle login
+      const popupWindow = window.open("", "_blank", "width=600,height=600");
+      if (!popupWindow) {
+        throw new Error(
+          "Popup was blocked. Please allow popups for this site."
+        );
+      }
+      popupWindow.close();
+
+      const loginResponse = await msalInstance.loginPopup(loginRequest);
+      console.log("[Auth] Login successful", loginResponse);
+
+      //After login, acquire token silently
+      const tokenRequest = {
+        scopes: this.config.scopes,
+        account: loginResponse.account,
+      };
+
+      const tokenResponse = await msalInstance.acquireTokenSilent(tokenRequest);
+      this.authToken = tokenResponse.accessToken;
       this.isAuthenticated = true;
 
-      // Lưu username để dùng cho silent login
-      localStorage.setItem("preferredUsername", loginResult.account.username);
+      localStorage.setItem("preferredUsername", loginResponse.account.username);
+      this.storeAuthToken(tokenResponse);
 
-      return loginResult;
+      return loginResponse;
     } catch (error) {
       console.error("[Auth] Login failed:", error);
+
+      if (error instanceof msal.InteractionRequiredAuthError) {
+        console.log("[Auth] Interaction required");
+      } else if (error instanceof msal.BrowserAuthError) {
+        console.log("[Auth] Browser auth error:", error.errorCode);
+      }
       throw error;
     }
   }
-
   // Find the file ID for the Excel file in OneDrive
   async findFileId() {
     try {
