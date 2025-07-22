@@ -541,51 +541,89 @@ function hideProgressBar() {
   }
 }
 
-// Event listener for the upload button
 document.addEventListener("DOMContentLoaded", function () {
   PeopleDetectionSystem.initialize();
+
+  // Thêm UI cho OneDrive
   addOneDriveSyncUI();
-  // Initialize OneDrive if needed
-  if (localStorage.getItem("oneDriveAuthToken")) {
-    initializeOneDriveSync();
-  }
-  const uploadButton = document.querySelector(".upload-button");
-  showProgressBar();
-  uploadButton.addEventListener("click", async function (event) {
-    event.preventDefault();
-    try {
-      if (fileHandle) {
-        const file = await fileHandle.getFile();
-        await handleFileUpload(file);
-        return;
-      }
-    } catch (error) {
-      console.error("Không thể sử dụng file handle cũ:", error);
-      fileHandle = null;
-    }
 
-    const fileInput = document.createElement("input");
-    fileInput.type = "file";
-    fileInput.accept = ".xlsx, .xls";
-    fileInput.style.display = "none";
+  // Tự động khởi tạo và kết nối OneDrive ngay khi tải trang
+  autoConnectOneDrive();
 
-    fileInput.addEventListener("change", function (e) {
-      if (e.target.files.length > 0) {
-        const file = e.target.files[0];
-        handleFileUpload(file);
+  // Các code khác giữ nguyên...
+});
+
+// Hàm tự động kết nối OneDrive khi khởi động
+async function autoConnectOneDrive() {
+  console.log("[App] Auto-connecting to OneDrive...");
+
+  try {
+    // Khởi tạo OneDrive
+    await loadMicrosoftLibraries();
+
+    oneDriveSync = new OneDriveSync();
+
+    // Thiết lập cấu hình với polling interval là 2 phút (120000ms)
+    oneDriveSync.init({
+      fileName: "MeetingSchedule.xlsx",
+      pollingInterval: 120000, // 2 phút
+      autoConnect: true, // Thêm flag để biết đây là kết nối tự động
+
+      onFileChanged: async (file) => {
+        console.log("[OneDrive] File changed, processing...");
         showProgressBar();
-      }
+        updateProgress(10, "Đang đồng bộ dữ liệu từ OneDrive...");
+
+        try {
+          await handleFileUpload(file);
+          showOneDriveNotification("Đồng bộ dữ liệu từ OneDrive thành công");
+        } catch (error) {
+          console.error("[OneDrive] Error processing synced file:", error);
+          showOneDriveNotification("Lỗi đồng bộ dữ liệu", true);
+        }
+      },
+
+      onSyncError: (message, error) => {
+        console.error(`[OneDrive] Sync error: ${message}`, error);
+        showOneDriveNotification("Lỗi đồng bộ OneDrive", true);
+      },
+
+      onSyncSuccess: (message) => {
+        console.log(`[OneDrive] ${message}`);
+      },
+
+      onConnectionStatusChanged: (isConnected, message) => {
+        console.log(
+          `[OneDrive] Connection status: ${
+            isConnected ? "Connected" : "Disconnected"
+          } - ${message}`
+        );
+        updateOneDriveUI(isConnected);
+
+        if (isConnected) {
+          showOneDriveNotification("Kết nối OneDrive thành công");
+        } else if (!isConnected && message !== "Initial connection") {
+          showOneDriveNotification(
+            "Mất kết nối OneDrive, đang thử kết nối lại...",
+            true
+          );
+        }
+      },
     });
 
-    fileInput.click();
-  });
-
-  // Event listener for clicks outside the upload button
-  document.addEventListener("click", function (event) {
-    if (!uploadButton.contains(event.target)) {
+    // Tự động tải dữ liệu ban đầu nếu đã có file ID
+    if (oneDriveSync.config.fileId) {
+      await oneDriveSync.downloadAndProcessFile();
     }
-  });
-});
+  } catch (error) {
+    console.error("[App] Auto-connect to OneDrive failed:", error);
+
+    // Nếu kết nối tự động thất bại, chờ 30 giây và thử lại
+    setTimeout(() => {
+      autoConnectOneDrive();
+    }, 30000);
+  }
+}
 
 document
   .getElementById("stopUploadBtn")
@@ -3278,22 +3316,30 @@ function addOneDriveSyncUI() {
 
   connectBtn.addEventListener("click", async () => {
     if (!oneDriveSync) {
-      initializeOneDriveSync();
+      //Initialize OneDrive sync if not already done
+      await autoConnectOneDrive();
       return;
     }
 
     connectBtn.disabled = true;
-    connectBtn.textContent = "Connecting...";
+    connectBtn.textContent = "Đang kết nối...";
 
     try {
-      await oneDriveSync.signIn();
-      await oneDriveSync.findFileId();
+      //If not authenticated or connection is unhealthy, sign in and start sync polling
+      if (!oneDriveSync.isAuthenticated || !oneDriveSync.connectionHealthy) {
+        await oneDriveSync.signIn();
+        await oneDriveSync.findFileId();
+        oneDriveSync.startSyncPolling();
+      }
+
+      //Download and process the file
+      await oneDriveSync.downloadAndProcessFile();
 
       updateOneDriveUI(true);
-      oneDriveSync.startSyncPolling();
+      showOneDriveNotification("Kết nối OneDrive thành công");
     } catch (error) {
       console.error("Failed to connect to OneDrive:", error);
-      alert("Failed to connect to OneDrive. Please try again.");
+      showOneDriveNotification("Lỗi kết nối OneDrive", true);
     } finally {
       connectBtn.disabled = false;
       connectBtn.textContent = "Connect";
