@@ -123,6 +123,29 @@ function addOneDriveSyncUI() {
   // Add styles
   const oneDriveUIStyle = document.createElement("style");
   oneDriveUIStyle.textContent = `
+    .onedrive-sync-btn.syncing {
+    background-color: #ffc107;
+    color: #212529;
+    position: relative;
+    }
+    .onedrive-sync-btn.syncing:after {
+      content: '';
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      border: 2px solid transparent;
+      border-top-color: #212529;
+      border-radius: 50%;
+      right: 8px;
+      top: 50%;
+      margin-top: -6px;
+      animation: sync-spinner 1s linear infinite;
+    }
+
+    @keyframes sync-spinner {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
     .onedrive-section {
       background-color: rgba(255, 255, 255, 0.9);
       border-radius: 8px;
@@ -226,26 +249,33 @@ function addOneDriveSyncUI() {
     }
   });
 
+  // Cập nhật event listener cho nút Sync Now
   syncBtn.addEventListener("click", async () => {
     if (!oneDriveSync) return;
 
     syncBtn.disabled = true;
     syncBtn.textContent = "Syncing...";
+    syncBtn.classList.add("syncing");
 
     try {
-      await oneDriveSync.checkForChanges();
+      // Gọi checkForChanges với force=true để bỏ qua kiểm tra thời gian
+      await oneDriveSync.checkForChanges(true);
 
       // Update last sync time
       const lastSyncEl = oneDriveSection.querySelector(".last-sync");
       if (lastSyncEl) {
-        lastSyncEl.textContent = `Last sync: ${new Date().toLocaleTimeString()}`;
+        lastSyncEl.textContent = `Last sync: ${new Date().toLocaleString()}`;
       }
+
+      // Hiển thị thông báo đồng bộ thành công
+      showOneDriveNotification("File synchronized successfully");
     } catch (error) {
       console.error("Failed to sync with OneDrive:", error);
-      alert("Failed to sync with OneDrive. Please try again.");
+      showOneDriveNotification("Failed to sync with OneDrive", true);
     } finally {
       syncBtn.disabled = false;
       syncBtn.textContent = "Sync Now";
+      syncBtn.classList.remove("syncing");
     }
   });
 
@@ -308,15 +338,17 @@ class OneDriveSync {
     this.refreshToken = null; // Store refresh token
     this.tokenExpiryTime = null; // Track token expiry
     this.lastModifiedTime = null;
+    this.lastSyncTime = null; // Thêm để lưu thời gian đồng bộ gần nhất
     this.syncInterval = null;
     this.healthCheckInterval = null; // New interval for connection health check
     this.retryCount = 0;
     this.maxRetries = 5; // Increased retries
-    this.pollingInterval = 30000; // Check every 30 seconds
+    this.pollingInterval = 30000; // Cập nhật thành 30 giây thay vì 10 giây
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 10;
     this.tokenRefreshBuffer = 300000; // Refresh token 5 minutes before expiry
     this.connectionHealthy = false;
+    this.isSyncing = false; // Flag để theo dõi trạng thái đồng bộ
 
     // Event handlers
     this.onFileChanged = null;
@@ -663,18 +695,26 @@ class OneDriveSync {
   }
 
   // Check for file changes
-  async checkForChanges() {
+  async checkForChanges(force = false) {
     if (!this.config.fileId || !this.authToken) {
       throw new Error("File ID or auth token not available");
     }
 
     try {
+      console.log(
+        `[OneDrive] Checking for changes to file: ${this.config.fileName}${
+          force ? " (forced)" : ""
+        }`
+      );
+
       const response = await fetch(
         `https://graph.microsoft.com/v1.0/me/drive/items/${this.config.fileId}`,
         {
           headers: {
             Authorization: `Bearer ${this.authToken}`,
           },
+          // Thêm cache: 'no-store' để đảm bảo luôn nhận phiên bản mới nhất
+          cache: "no-store",
         }
       );
 
@@ -683,7 +723,7 @@ class OneDriveSync {
         if (response.status === 401) {
           console.log("[OneDrive] Token expired, refreshing...");
           await this.refreshToken();
-          return this.checkForChanges();
+          return this.checkForChanges(force);
         }
         throw new Error(`Failed to check file: ${response.statusText}`);
       }
@@ -691,19 +731,39 @@ class OneDriveSync {
       const data = await response.json();
       const newModifiedTime = data.lastModifiedDateTime;
 
-      // If the file has been modified since our last check
+      console.log(`[OneDrive] File last modified: ${newModifiedTime}`);
+      console.log(
+        `[OneDrive] Our last known modified time: ${this.lastModifiedTime}`
+      );
+
+      // Nếu force=true hoặc file đã được sửa đổi kể từ lần kiểm tra cuối cùng
       if (
+        force ||
         !this.lastModifiedTime ||
         new Date(newModifiedTime) > new Date(this.lastModifiedTime)
       ) {
-        console.log(
-          `[OneDrive] File changed! Last: ${this.lastModifiedTime}, New: ${newModifiedTime}`
-        );
+        if (force) {
+          console.log("[OneDrive] Forced sync requested, downloading file...");
+        } else {
+          console.log(
+            `[OneDrive] File changed! Last: ${this.lastModifiedTime}, New: ${newModifiedTime}`
+          );
+        }
+
         this.lastModifiedTime = newModifiedTime;
         localStorage.setItem("oneDriveLastModified", this.lastModifiedTime);
 
         // Download and process the updated file
         await this.downloadAndProcessFile();
+
+        // Lưu thời gian đồng bộ mới nhất
+        this.lastSyncTime = new Date();
+        localStorage.setItem(
+          "oneDriveLastSyncTime",
+          this.lastSyncTime.toISOString()
+        );
+      } else {
+        console.log("[OneDrive] No changes detected");
       }
 
       // Reset retry count on successful check
@@ -712,6 +772,8 @@ class OneDriveSync {
       if (this.onSyncSuccess) {
         this.onSyncSuccess("Sync check completed successfully");
       }
+
+      return true;
     } catch (error) {
       console.error("[OneDrive] Error checking for changes:", error);
       throw error;
@@ -721,6 +783,12 @@ class OneDriveSync {
   // Download and process the file when changed
   async downloadAndProcessFile() {
     try {
+      // Đặt flag đồng bộ
+      this.isSyncing = true;
+
+      // Cập nhật UI để hiển thị đang đồng bộ
+      this.updateSyncingUI(true);
+
       console.log(`[OneDrive] Downloading file with ID: ${this.config.fileId}`);
 
       const response = await fetch(
@@ -729,6 +797,8 @@ class OneDriveSync {
           headers: {
             Authorization: `Bearer ${this.authToken}`,
           },
+          // Thêm cache: 'no-store' để đảm bảo lấy phiên bản mới nhất
+          cache: "no-store",
         }
       );
 
@@ -748,15 +818,33 @@ class OneDriveSync {
         await this.onFileChanged(file);
       }
 
+      // Cập nhật thời gian đồng bộ
+      this.lastSyncTime = new Date();
+      localStorage.setItem(
+        "oneDriveLastSyncTime",
+        this.lastSyncTime.toISOString()
+      );
+
+      // Cập nhật UI sau khi đồng bộ hoàn tất
+      this.updateSyncingUI(false);
+
       return file;
     } catch (error) {
       console.error("[OneDrive] Error downloading file:", error);
+
+      // Cập nhật UI khi có lỗi
+      this.updateSyncingUI(false, true);
+
       if (this.onSyncError) {
         this.onSyncError("Failed to download updated file", error);
       }
       throw error;
+    } finally {
+      // Đảm bảo flag được reset
+      this.isSyncing = false;
     }
   }
+
   async acquireToken() {
     try {
       const msalInstance = this.getMsalInstance();
@@ -794,6 +882,12 @@ class OneDriveSync {
     this.config.fileId = localStorage.getItem("oneDriveFileId");
     this.lastModifiedTime = localStorage.getItem("oneDriveLastModified");
 
+    // Thêm để tải thời gian đồng bộ cuối cùng
+    const lastSyncTime = localStorage.getItem("oneDriveLastSyncTime");
+    if (lastSyncTime) {
+      this.lastSyncTime = new Date(lastSyncTime);
+    }
+
     // Check if token is expired
     const tokenExpiry = localStorage.getItem("oneDriveTokenExpiry");
     if (tokenExpiry && new Date(tokenExpiry) <= new Date()) {
@@ -809,6 +903,43 @@ class OneDriveSync {
     } catch (error) {
       console.error("[OneDrive] Failed to refresh token:", error);
       throw error;
+    }
+  }
+
+  // Thêm phương thức để cập nhật UI khi đang đồng bộ
+  updateSyncingUI(isSyncing, hasError = false) {
+    // Nếu có event handler, gọi nó
+    if (this.onConnectionStatusChanged) {
+      if (isSyncing) {
+        this.onConnectionStatusChanged(true, "Syncing...");
+      } else if (hasError) {
+        this.onConnectionStatusChanged(true, "Sync error");
+      } else {
+        this.onConnectionStatusChanged(true, "Connected");
+      }
+    }
+
+    // Cập nhật UI trực tiếp (nếu cần)
+    const oneDriveSection = document.querySelector(".onedrive-section");
+    if (oneDriveSection) {
+      const syncBtn = oneDriveSection.querySelector(".onedrive-sync-btn");
+      const lastSyncEl = oneDriveSection.querySelector(".last-sync");
+
+      if (syncBtn) {
+        if (isSyncing) {
+          syncBtn.disabled = true;
+          syncBtn.textContent = "Syncing...";
+          syncBtn.classList.add("syncing");
+        } else {
+          syncBtn.disabled = false;
+          syncBtn.textContent = "Sync Now";
+          syncBtn.classList.remove("syncing");
+        }
+      }
+
+      if (lastSyncEl && this.lastSyncTime) {
+        lastSyncEl.textContent = `Last sync: ${this.lastSyncTime.toLocaleString()}`;
+      }
     }
   }
 }
