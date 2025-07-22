@@ -10,22 +10,147 @@ class OneDriveSync {
       fileName: "MeetingSchedule.xlsx", // Default file name to look for
       filePath: "/Documents/", // Default path in OneDrive to check
     };
+
     this.isAuthenticated = false;
     this.authToken = null;
+    this.refreshToken = null; // Store refresh token
+    this.tokenExpiryTime = null; // Track token expiry
     this.lastModifiedTime = null;
     this.syncInterval = null;
+    this.healthCheckInterval = null; // New interval for connection health check
     this.retryCount = 0;
-    this.maxRetries = 3;
+    this.maxRetries = 5; // Increased retries
     this.pollingInterval = 30000; // Check every 30 seconds
+    this.reconnectAttempts = 0;
+    this.maxReconnectAttempts = 10;
+    this.tokenRefreshBuffer = 300000; // Refresh token 5 minutes before expiry
+    this.connectionHealthy = false;
 
     // Event handlers
     this.onFileChanged = null;
     this.onSyncError = null;
     this.onSyncSuccess = null;
+    this.onConnectionStatusChanged = null;
+
+    // Check auth state and load stored credentials
     this.checkAuthState();
-    // Check if we have stored credentials
     this.loadStoredAuth();
+
+    // Start monitoring connection health
+    this.startHealthCheck();
   }
+
+  startHealthCheck() {
+    // Clear existing health check interval
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+    }
+
+    // Set up new interval
+    this.healthCheckInterval = setInterval(() => {
+      this.checkConnectionHealth();
+    }, 60000); // Check every minute
+  }
+
+  async checkConnectionHealth() {
+    console.log("[OneDrive] Performing connection health check...");
+
+    try {
+      if (!this.authToken || !this.isAuthenticated) {
+        console.log("[OneDrive] No active session, attempting reconnect...");
+        await this.reconnect();
+        return;
+      }
+
+      // Check token expiry
+      if (
+        this.tokenExpiryTime &&
+        new Date(this.tokenExpiryTime) - new Date() < this.tokenRefreshBuffer
+      ) {
+        console.log("[OneDrive] Token expiring soon, refreshing...");
+        await this.refreshAccessToken();
+      }
+
+      // Verify connection with a simple API call
+      const response = await fetch("https://graph.microsoft.com/v1.0/me", {
+        headers: {
+          Authorization: `Bearer ${this.authToken}`,
+        },
+      });
+
+      if (response.ok) {
+        console.log("[OneDrive] Connection health check passed");
+
+        if (!this.connectionHealthy) {
+          this.connectionHealthy = true;
+          if (this.onConnectionStatusChanged) {
+            this.onConnectionStatusChanged(true, "Connection established");
+          }
+        }
+
+        this.reconnectAttempts = 0;
+      } else {
+        console.warn(
+          "[OneDrive] Connection health check failed, attempting to refresh token"
+        );
+        await this.refreshAccessToken();
+      }
+    } catch (error) {
+      console.error("[OneDrive] Health check error:", error);
+      this.connectionHealthy = false;
+
+      if (this.onConnectionStatusChanged) {
+        this.onConnectionStatusChanged(false, "Connection lost");
+      }
+
+      await this.reconnect();
+    }
+  }
+
+  async reconnect() {
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.error("[OneDrive] Max reconnection attempts reached");
+      return;
+    }
+
+    this.reconnectAttempts++;
+    console.log(
+      `[OneDrive] Reconnection attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}`
+    );
+
+    try {
+      await this.acquireToken();
+
+      if (this.config.fileId) {
+        // Verify file is still accessible
+        await this.checkForChanges();
+      } else if (this.config.fileName) {
+        // Try to find file again
+        await this.findFileId();
+      }
+
+      this.startSyncPolling();
+      this.connectionHealthy = true;
+      this.reconnectAttempts = 0;
+
+      console.log("[OneDrive] Reconnection successful");
+      if (this.onConnectionStatusChanged) {
+        this.onConnectionStatusChanged(true, "Reconnected successfully");
+      }
+    } catch (error) {
+      console.error("[OneDrive] Reconnection failed:", error);
+
+      // Exponential backoff for retry
+      const backoffTime = Math.min(
+        30000,
+        1000 * Math.pow(2, this.reconnectAttempts)
+      );
+      console.log(`[OneDrive] Will retry in ${backoffTime / 1000} seconds`);
+
+      setTimeout(() => this.reconnect(), backoffTime);
+    }
+  }
+
   async checkAuthState() {
     try {
       const msalInstance = this.getMsalInstance();
@@ -37,7 +162,7 @@ class OneDriveSync {
         await this.acquireToken();
       }
     } catch (error) {
-      console.error("[Auth] Failed to check auth state:", error);
+      console.error("[OneDrive] Error checking auth state:", error);
     }
   }
 
@@ -53,13 +178,13 @@ class OneDriveSync {
           postLogoutRedirectUri: this.config.redirectUri,
         },
         cache: {
-          cacheLocation: "sessionStorage",
+          cacheLocation: "localStorage",
           storeAuthStateInCookie: true,
         },
         system: {
           allowNativeBroker: false, // Disable native broker
           loggerOptions: {
-            logLevel: msal.LogLevel.Verbose,
+            logLevel: msal.LogLevel.Warning,
             piiLoggingEnabled: false,
           },
         },
@@ -74,20 +199,32 @@ class OneDriveSync {
   async init(options = {}) {
     console.log("[OneDrive] Initializing OneDrive sync...");
 
-    // Apply custom options
-    if (options.fileName) this.config.fileName = options.fileName;
-    if (options.filePath) this.config.filePath = options.filePath;
-    if (options.pollingInterval) this.pollingInterval = options.pollingInterval;
-    if (options.onFileChanged) this.onFileChanged = options.onFileChanged;
-    if (options.onSyncError) this.onSyncError = options.onSyncError;
-    if (options.onSyncSuccess) this.onSyncSuccess = options.onSyncSuccess;
-
     try {
-      // Sign in and get file ID if not available
-      if (!this.authToken) {
-        await this.signIn();
+      // Apply custom options
+      if (options.fileName) this.config.fileName = options.fileName;
+      if (options.filePath) this.config.filePath = options.filePath;
+      if (options.pollingInterval)
+        this.pollingInterval = options.pollingInterval;
+      if (options.onFileChanged) this.onFileChanged = options.onFileChanged;
+      if (options.onSyncError) this.onSyncError = options.onSyncError;
+      if (options.onSyncSuccess) this.onSyncSuccess = options.onSyncSuccess;
+      if (options.onConnectionStatusChanged)
+        this.onConnectionStatusChanged = options.onConnectionStatusChanged;
+
+      // Try to restore session
+      if (!this.isAuthenticated || !this.authToken) {
+        const accounts = this.getMsalInstance().getAllAccounts();
+
+        if (accounts.length > 0) {
+          console.log("[OneDrive] Restoring previous session");
+          await this.acquireToken();
+        } else {
+          console.log("[OneDrive] No previous session found");
+          await this.signIn();
+        }
       }
 
+      // Get file ID if not already available
       if (!this.config.fileId) {
         await this.findFileId();
       }
@@ -95,13 +232,22 @@ class OneDriveSync {
       // Start polling for changes
       this.startSyncPolling();
 
+      // Initialize connection status
+      this.connectionHealthy = true;
+      if (this.onConnectionStatusChanged) {
+        this.onConnectionStatusChanged(true, "Connected");
+      }
+
       return true;
     } catch (error) {
       console.error("[OneDrive] Initialization failed:", error);
       if (this.onSyncError) {
         this.onSyncError("Failed to initialize OneDrive sync", error);
       }
-      return false;
+
+      if (this.onConnectionStatusChanged) {
+        this.onConnectionStatusChanged(false, "Connection failed");
+      }
     }
   }
 
@@ -334,6 +480,7 @@ class OneDriveSync {
       });
 
       this.authToken = result.accessToken;
+      this.tokenExpiryTime = new Date(Date.now() + result.expiresIn * 1000);
       return result;
     } catch (error) {
       console.error("[Auth] Token acquisition failed:", error);
