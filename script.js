@@ -549,6 +549,14 @@ document.addEventListener("DOMContentLoaded", function () {
   if (localStorage.getItem("oneDriveAuthToken")) {
     initializeOneDriveSync();
   }
+  autoConnectAndSyncOneDrive()
+    .then(() => {
+      console.log("[App] Auto-connect process completed");
+    })
+    .catch((err) => {
+      console.error("[App] Auto-connect process failed:", err);
+    });
+  setupAutoRefreshCheck();
   const uploadButton = document.querySelector(".upload-button");
   showProgressBar();
   uploadButton.addEventListener("click", async function (event) {
@@ -586,7 +594,36 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   });
 });
+function setupAutoRefreshCheck() {
+  const checkRefreshNeeded = () => {
+    const now = new Date();
+    if (shouldRefreshData()) {
+      console.log("[App] Auto refresh check: refresh needed");
 
+      if (oneDriveSync?.isAuthenticated && oneDriveSync?.config?.fileId) {
+        oneDriveSync
+          .downloadAndProcessFile()
+          .then(() => {
+            console.log("[App] Auto refresh successful");
+            saveLastSyncTime();
+          })
+          .catch((err) => {
+            console.error("[App] Auto refresh failed:", err);
+          });
+      } else {
+        console.log("[App] Auto refresh needed but OneDrive not available");
+      }
+    } else {
+      console.log("[App] Auto refresh check: no refresh needed");
+    }
+  };
+
+  // Kiểm tra mỗi 30 phút
+  setInterval(checkRefreshNeeded, 30 * 60 * 1000);
+
+  // Kiểm tra ngay khi setup
+  setTimeout(checkRefreshNeeded, 5000);
+}
 document
   .getElementById("stopUploadBtn")
   .addEventListener("click", hideProgressBar);
@@ -635,8 +672,16 @@ async function handleFileUpload(file) {
     // Filter meetings for today
     const today = new Date();
     const todayMeetings = mergedData.filter((meeting) => {
-      const meetingDate = new Date(meeting.date.split("/").reverse().join("-"));
-      return meetingDate.toDateString() === today.toDateString();
+      const meetingDateParts = meeting.date.split("/");
+      const meetingDay = parseInt(meetingDateParts[0]);
+      const meetingMonth = parseInt(meetingDateParts[1]);
+      const meetingYear = parseInt(meetingDateParts[2]);
+
+      return (
+        meetingDay === today.getDate() &&
+        meetingMonth === today.getMonth() + 1 &&
+        meetingYear === today.getFullYear()
+      );
     });
 
     updateProgress(60, "Updating schedule...");
@@ -658,13 +703,18 @@ async function handleFileUpload(file) {
     startAutoUpdate(mergedData);
 
     updateProgress(80, "Saving cache...");
+
+    // Lưu dữ liệu vào localStorage
     localStorage.setItem(
       "fileCache",
       JSON.stringify({
-        data: mergedData, // Must be merged data
+        data: mergedData,
         lastModified: new Date().getTime(),
       })
     );
+
+    // Cập nhật thời gian đồng bộ cuối
+    saveLastSyncTime();
 
     updateProgress(90, "Setting up monitoring...");
     if (fileHandle) {
@@ -681,6 +731,8 @@ async function handleFileUpload(file) {
       progressContainer.style.display = "none";
       progressContainer.classList.remove("upload-complete");
     }, 2000);
+
+    return mergedData;
   } catch (error) {
     console.error("Error processing file:", error);
     progressStatus.textContent = "Upload failed!";
@@ -690,7 +742,11 @@ async function handleFileUpload(file) {
       progressContainer.style.display = "none";
     }, 2000);
 
-    alert("Error processing file. Please try again.");
+    if (error.message !== "CONFLICT_ERROR") {
+      alert("Error processing file. Please try again.");
+    }
+
+    throw error;
   }
 }
 
@@ -1433,14 +1489,48 @@ function isTimeOverdue(endTime, currentTime) {
 //==== Function related times, overdueTime=======
 function startAutoUpdate(data) {
   updateRoomStatus(data);
+
+  // Clear existing interval if any
+  if (window.autoUpdateInterval) {
+    clearInterval(window.autoUpdateInterval);
+  }
+
   const intervalId = setInterval(() => {
+    const now = new Date();
     const currentTime = getCurrentTime();
-    // Chỉ cập nhật khi thay đổi phút
+
+    // Kiểm tra nếu bây giờ là 18:00, thực hiện refresh dữ liệu
+    if (
+      now.getHours() === 18 &&
+      now.getMinutes() === 0 &&
+      now.getSeconds() <= 10
+    ) {
+      console.log("Daily refresh at 18:00");
+
+      // Kiểm tra xem đã refresh hôm nay chưa
+      const lastRefreshStr = localStorage.getItem("lastDailyRefresh");
+      const shouldRefresh =
+        !lastRefreshStr || new Date(lastRefreshStr).getDate() !== now.getDate();
+
+      if (shouldRefresh && oneDriveSync?.isAuthenticated) {
+        // Lưu thời gian refresh
+        localStorage.setItem("lastDailyRefresh", now.toISOString());
+
+        // Thực hiện refresh
+        console.log("Performing daily data refresh from OneDrive");
+        oneDriveSync
+          .downloadAndProcessFile()
+          .then(() => console.log("Daily refresh successful"))
+          .catch((err) => console.error("Daily refresh failed:", err));
+      }
+    }
+
+    // Cập nhật UI mỗi phút
     if (currentTime.endsWith(":00")) {
       console.log("Auto updating at:", currentTime);
       updateRoomStatus(data);
     }
-  }, 1000); // Vẫn kiểm tra mỗi giây nhưng chỉ cập nhật khi đổi phút
+  }, 1000);
 
   window.autoUpdateInterval = intervalId;
   return () => clearInterval(intervalId);
@@ -3073,3 +3163,196 @@ const PeopleDetectionSystem = {
     dot.classList.add("status-update");
   },
 };
+
+// Thêm hàm autoConnectAndSyncOneDrive vào đầu file
+async function autoConnectAndSyncOneDrive() {
+  console.log("[App] Attempting auto-connect to OneDrive...");
+
+  try {
+    // Kiểm tra xem có nên refresh dữ liệu không (sau 18:00 hoặc chưa có dữ liệu cho hôm nay)
+    if (shouldRefreshData()) {
+      console.log("[App] Data needs to be refreshed");
+
+      // Khởi tạo OneDrive nếu chưa có
+      if (!oneDriveSync) {
+        await loadMicrosoftLibraries();
+        oneDriveSync = new OneDriveSync();
+
+        // Cấu hình với silent mode = true để không hiện popup nếu đã đăng nhập trước đó
+        await oneDriveSync.init({
+          fileName: "MeetingSchedule.xlsx",
+          pollingInterval: 120000, // Kiểm tra mỗi 2 phút
+          silentMode: true,
+          onFileChanged: handleOneDriveFileChanged,
+          onSyncError: handleOneDriveSyncError,
+          onSyncSuccess: handleOneDriveSyncSuccess,
+        });
+      }
+
+      // Kiểm tra xem đã authenticate và có fileId chưa
+      if (oneDriveSync.isAuthenticated && oneDriveSync.config.fileId) {
+        // Tải và xử lý file từ OneDrive
+        console.log("[App] Auto-downloading OneDrive file...");
+        await oneDriveSync.downloadAndProcessFile();
+        console.log("[App] Auto-sync completed successfully");
+      } else if (localStorage.getItem("oneDriveAuthToken")) {
+        // Thử khôi phục phiên
+        try {
+          await oneDriveSync.acquireToken();
+          if (!oneDriveSync.config.fileId) {
+            await oneDriveSync.findFileId();
+          }
+          await oneDriveSync.downloadAndProcessFile();
+          console.log(
+            "[App] Auto-sync with restored session completed successfully"
+          );
+        } catch (error) {
+          console.log(
+            "[App] Unable to auto-sync with restored session:",
+            error
+          );
+          loadCachedData(); // Fallback to cached data
+        }
+      } else {
+        // Nếu không thể kết nối tự động, tải dữ liệu từ cache
+        console.log("[App] No OneDrive auth, loading from cache...");
+        loadCachedData();
+      }
+    } else {
+      // Nếu không cần refresh, tải dữ liệu từ cache
+      console.log("[App] Using cached data (no refresh needed)");
+      loadCachedData();
+    }
+  } catch (error) {
+    console.error("[App] Auto-connect failed:", error);
+    // Fallback to cached data
+    loadCachedData();
+  }
+}
+
+// Các handler cho OneDrive events
+function handleOneDriveFileChanged(file) {
+  console.log("[OneDrive] File changed, processing...");
+  showProgressBar();
+  updateProgress(10, "Đang đồng bộ dữ liệu từ OneDrive...");
+
+  return handleFileUpload(file)
+    .then(() => {
+      showOneDriveNotification("Đồng bộ dữ liệu từ OneDrive thành công");
+      saveLastSyncTime(); // Lưu thời gian đồng bộ cuối cùng
+    })
+    .catch((error) => {
+      console.error("[OneDrive] Error processing synced file:", error);
+      showOneDriveNotification("Lỗi đồng bộ dữ liệu", true);
+      throw error;
+    });
+}
+
+function handleOneDriveSyncError(message, error) {
+  console.error(`[OneDrive] Sync error: ${message}`, error);
+  showOneDriveNotification("Lỗi đồng bộ OneDrive", true);
+}
+
+function handleOneDriveSyncSuccess(message) {
+  console.log(`[OneDrive] ${message}`);
+}
+
+// Hàm kiểm tra xem có nên refresh dữ liệu hay không
+function shouldRefreshData() {
+  // Lấy thời gian đồng bộ cuối cùng
+  const lastSyncTimeStr = localStorage.getItem("lastDataSyncTime");
+
+  if (!lastSyncTimeStr) {
+    return true; // Chưa từng đồng bộ, cần refresh
+  }
+
+  const now = new Date();
+  const lastSyncTime = new Date(lastSyncTimeStr);
+
+  // Nếu đã qua 18:00 nhưng lần đồng bộ cuối là trước 18:00, cần refresh
+  if (
+    now.getHours() >= 18 &&
+    lastSyncTime.getHours() < 18 &&
+    lastSyncTime.getDate() === now.getDate()
+  ) {
+    return true;
+  }
+
+  // Nếu ngày hiện tại khác ngày đồng bộ cuối, cần refresh
+  if (
+    now.getDate() !== lastSyncTime.getDate() ||
+    now.getMonth() !== lastSyncTime.getMonth() ||
+    now.getFullYear() !== lastSyncTime.getFullYear()
+  ) {
+    return true;
+  }
+
+  // Nếu đã hơn 6 tiếng kể từ lần đồng bộ cuối, cần refresh
+  const hoursSinceLastSync = (now - lastSyncTime) / (1000 * 60 * 60);
+  if (hoursSinceLastSync > 6) {
+    return true;
+  }
+
+  return false; // Không cần refresh
+}
+
+// Lưu thời gian đồng bộ cuối cùng
+function saveLastSyncTime() {
+  localStorage.setItem("lastDataSyncTime", new Date().toISOString());
+}
+
+// Tải dữ liệu từ cache và hiển thị
+function loadCachedData() {
+  const cachedData = localStorage.getItem("fileCache");
+
+  if (cachedData) {
+    const parsed = JSON.parse(cachedData);
+
+    if (parsed && parsed.data && Array.isArray(parsed.data)) {
+      // Lọc các cuộc họp cho ngày hiện tại
+      const today = new Date();
+      const todayStr = `${String(today.getDate()).padStart(2, "0")}/${String(
+        today.getMonth() + 1
+      ).padStart(2, "0")}/${today.getFullYear()}`;
+
+      console.log("[App] Filtering cached data for today:", todayStr);
+
+      const todayMeetings = parsed.data.filter((meeting) => {
+        // Chuẩn hóa định dạng ngày tháng để so sánh
+        const meetingDateParts = meeting.date.split("/");
+        const meetingDay = parseInt(meetingDateParts[0]);
+        const meetingMonth = parseInt(meetingDateParts[1]);
+        const meetingYear = parseInt(meetingDateParts[2]);
+
+        return (
+          meetingDay === today.getDate() &&
+          meetingMonth === today.getMonth() + 1 &&
+          meetingYear === today.getFullYear()
+        );
+      });
+
+      console.log(
+        "[App] Found",
+        todayMeetings.length,
+        "meetings for today in cache"
+      );
+
+      // Hiển thị dữ liệu
+      updateScheduleTable(todayMeetings);
+      updateRoomStatus(todayMeetings);
+
+      // Bắt đầu auto update với dữ liệu đã lọc
+      startAutoUpdate(parsed.data);
+
+      // Hiển thị thông báo nếu không có cuộc họp hôm nay
+      if (todayMeetings.length === 0) {
+        showNoMeetingsNotification();
+      }
+
+      return true;
+    }
+  }
+
+  console.log("[App] No valid cached data found");
+  return false;
+}

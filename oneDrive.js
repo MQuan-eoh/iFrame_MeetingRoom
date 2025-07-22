@@ -519,7 +519,7 @@ class OneDriveSync {
     return this.msalInstance;
   }
 
-  // Initialize OneDrive sync
+  // Trong class OneDriveSync, thêm/sửa phương thức init
   async init(options = {}) {
     console.log("[OneDrive] Initializing OneDrive sync...");
 
@@ -535,6 +535,9 @@ class OneDriveSync {
       if (options.onConnectionStatusChanged)
         this.onConnectionStatusChanged = options.onConnectionStatusChanged;
 
+      // New option: silentMode
+      const silentMode = options.silentMode === true;
+
       // Try to restore session
       if (!this.isAuthenticated || !this.authToken) {
         const accounts = this.getMsalInstance().getAllAccounts();
@@ -542,24 +545,42 @@ class OneDriveSync {
         if (accounts.length > 0) {
           console.log("[OneDrive] Restoring previous session");
           await this.acquireToken();
-        } else {
-          console.log("[OneDrive] No previous session found");
+        } else if (!silentMode) {
+          // Only attempt interactive sign-in if not in silent mode
+          console.log(
+            "[OneDrive] No previous session found, interactive sign-in required"
+          );
           await this.signIn();
+        } else {
+          console.log(
+            "[OneDrive] No previous session found and silent mode enabled, skipping auth"
+          );
+          throw new Error("Authentication required but silent mode enabled");
         }
       }
 
       // Get file ID if not already available
       if (!this.config.fileId) {
-        await this.findFileId();
+        // Try to get file ID from localStorage first
+        const storedFileId = localStorage.getItem("oneDriveFileId");
+        if (storedFileId) {
+          this.config.fileId = storedFileId;
+          console.log(`[OneDrive] Using stored file ID: ${this.config.fileId}`);
+        } else if (this.isAuthenticated) {
+          // Only find file ID if authenticated
+          await this.findFileId();
+        }
       }
 
-      // Start polling for changes
-      this.startSyncPolling();
+      // Start polling for changes only if authenticated and have fileId
+      if (this.isAuthenticated && this.config.fileId) {
+        this.startSyncPolling();
 
-      // Initialize connection status
-      this.connectionHealthy = true;
-      if (this.onConnectionStatusChanged) {
-        this.onConnectionStatusChanged(true, "Connected");
+        // Initialize connection status
+        this.connectionHealthy = true;
+        if (this.onConnectionStatusChanged) {
+          this.onConnectionStatusChanged(true, "Connected");
+        }
       }
 
       return true;
@@ -572,6 +593,8 @@ class OneDriveSync {
       if (this.onConnectionStatusChanged) {
         this.onConnectionStatusChanged(false, "Connection failed");
       }
+
+      throw error;
     }
   }
 
