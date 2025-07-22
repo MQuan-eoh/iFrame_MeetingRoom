@@ -3,31 +3,28 @@ class OneDriveSync {
   constructor() {
     // Microsoft Graph API configuration
     this.config = {
-      clientId: "4a87bff7-097b-4771-91fe-21a5ab64a6d8",
+      clientId: "4a87bff7-097b-4771-91fe-21a5ab64a6d8", // Register an app in Azure AD to get this
       redirectUri: "https://mquan-eoh.github.io/iFrame_MeetingRoom/",
       scopes: ["Files.Read", "Files.Read.All", "User.Read", "Sites.Read.All"],
-      fileId: null,
-      fileName: "MeetingSchedule.xlsx",
-      filePath: "/Documents/",
-      autoConnect: false, // Thêm flag mới
+      fileId: null, // Will store the OneDrive file ID once identified
+      fileName: "MeetingSchedule.xlsx", // Default file name to look for
+      filePath: "/Documents/", // Default path in OneDrive to check
     };
 
     this.isAuthenticated = false;
     this.authToken = null;
-    this.refreshToken = null;
-    this.tokenExpiryTime = null;
+    this.refreshToken = null; // Store refresh token
+    this.tokenExpiryTime = null; // Track token expiry
     this.lastModifiedTime = null;
     this.syncInterval = null;
-    this.healthCheckInterval = null;
+    this.healthCheckInterval = null; // New interval for connection health check
     this.retryCount = 0;
-    this.maxRetries = 10; //Increase max retries
-    this.pollingInterval = 120000; //Changed to 2 minutes
+    this.maxRetries = 5; // Increased retries
+    this.pollingInterval = 30000; // Check every 30 seconds
     this.reconnectAttempts = 0;
-    this.maxReconnectAttempts = 20; //Increase max reconnect attempts
-    this.tokenRefreshBuffer = 300000; // 5 minutes buffer before token expiry
+    this.maxReconnectAttempts = 10;
+    this.tokenRefreshBuffer = 300000; // Refresh token 5 minutes before expiry
     this.connectionHealthy = false;
-    this.isInitializing = false;
-    this.lastSyncTime = null;
 
     // Event handlers
     this.onFileChanged = null;
@@ -35,176 +32,46 @@ class OneDriveSync {
     this.onSyncSuccess = null;
     this.onConnectionStatusChanged = null;
 
+    // Check auth state and load stored credentials
+    this.checkAuthState();
     this.loadStoredAuth();
 
-    setTimeout(() => {
-      this.startHealthCheck();
-    }, 5000);
+    // Start monitoring connection health
+    this.startHealthCheck();
   }
 
-  //Update init method to handle options and auto-connect
-  async init(options = {}) {
-    console.log("[OneDrive] Initializing OneDrive sync...");
-
-    if (this.isInitializing) {
-      console.log("[OneDrive] Already initializing, skipping duplicate call");
-      return;
-    }
-
-    this.isInitializing = true;
-
-    try {
-      // Apply custom options
-      if (options.fileName) this.config.fileName = options.fileName;
-      if (options.filePath) this.config.filePath = options.filePath;
-      if (options.pollingInterval)
-        this.pollingInterval = options.pollingInterval;
-      if (options.autoConnect !== undefined)
-        this.config.autoConnect = options.autoConnect;
-
-      // Set event handlers
-      this.onFileChanged = options.onFileChanged || this.onFileChanged;
-      this.onSyncError = options.onSyncError || this.onSyncError;
-      this.onSyncSuccess = options.onSyncSuccess || this.onSyncSuccess;
-      this.onConnectionStatusChanged =
-        options.onConnectionStatusChanged || this.onConnectionStatusChanged;
-
-      // Notify that we're trying to connect
-      if (this.onConnectionStatusChanged) {
-        this.onConnectionStatusChanged(false, "Initial connection");
-      }
-
-      // Try to restore session
-      const accounts = this.getMsalInstance().getAllAccounts();
-      if (accounts.length > 0) {
-        console.log("[OneDrive] Restoring previous session");
-        await this.acquireToken();
-      } else if (this.config.autoConnect) {
-        console.log("[OneDrive] Auto-connecting...");
-        try {
-          await this.signIn();
-        } catch (error) {
-          console.warn("[OneDrive] Auto sign-in failed:", error);
-          // Silent failure in auto-connect mode
-          this.isInitializing = false;
-
-          // Retry after delay
-          setTimeout(() => {
-            this.init(options);
-          }, 30000);
-
-          return false;
-        }
-      } else {
-        console.log("[OneDrive] No previous session and auto-connect disabled");
-        this.isInitializing = false;
-        return false;
-      }
-
-      // Get file ID if not already available
-      if (!this.config.fileId) {
-        try {
-          await this.findFileId();
-        } catch (error) {
-          console.error("[OneDrive] Error finding file:", error);
-
-          if (this.config.autoConnect) {
-            // In auto-connect mode, retry after delay
-            this.isInitializing = false;
-            setTimeout(() => {
-              this.init(options);
-            }, 30000);
-            return false;
-          } else {
-            // In manual mode, propagate error
-            throw error;
-          }
-        }
-      }
-
-      // Start polling for changes
-      this.startSyncPolling();
-
-      // Start health check
-      this.startHealthCheck();
-
-      // Update connection status
-      this.connectionHealthy = true;
-      if (this.onConnectionStatusChanged) {
-        this.onConnectionStatusChanged(true, "Connected");
-      }
-
-      this.isInitializing = false;
-      return true;
-    } catch (error) {
-      console.error("[OneDrive] Initialization failed:", error);
-
-      if (this.onSyncError) {
-        this.onSyncError("Failed to initialize OneDrive sync", error);
-      }
-
-      if (this.onConnectionStatusChanged) {
-        this.onConnectionStatusChanged(false, "Connection failed");
-      }
-
-      this.isInitializing = false;
-
-      // Auto-retry in auto-connect mode
-      if (this.config.autoConnect) {
-        setTimeout(() => {
-          this.init(options);
-        }, 60000);
-      }
-
-      return false;
-    }
-  }
-
-  // Cải tiến health check để giữ kết nối liên tục
   startHealthCheck() {
     // Clear existing health check interval
     if (this.healthCheckInterval) {
       clearInterval(this.healthCheckInterval);
     }
 
-    // Kiểm tra sức khỏe kết nối thường xuyên hơn (30 giây)
+    // Set up new interval
     this.healthCheckInterval = setInterval(() => {
       this.checkConnectionHealth();
-    }, 30000);
-
-    // Thực hiện kiểm tra ngay lập tức
-    this.checkConnectionHealth();
+    }, 60000); // Check every minute
   }
 
   async checkConnectionHealth() {
     console.log("[OneDrive] Performing connection health check...");
 
-    // Nếu đang khởi tạo, bỏ qua health check
-    if (this.isInitializing) {
-      console.log(
-        "[OneDrive] Initialization in progress, skipping health check"
-      );
-      return;
-    }
-
     try {
-      // Kiểm tra token và trạng thái đăng nhập
       if (!this.authToken || !this.isAuthenticated) {
         console.log("[OneDrive] No active session, attempting reconnect...");
         await this.reconnect();
         return;
       }
 
-      // Kiểm tra token hết hạn
+      // Check token expiry
       if (
         this.tokenExpiryTime &&
         new Date(this.tokenExpiryTime) - new Date() < this.tokenRefreshBuffer
       ) {
         console.log("[OneDrive] Token expiring soon, refreshing...");
-        await this.refreshToken();
+        await this.refreshAccessToken();
       }
 
-      // Xác minh kết nối bằng API call đơn giản
+      // Verify connection with a simple API call
       const response = await fetch("https://graph.microsoft.com/v1.0/me", {
         headers: {
           Authorization: `Bearer ${this.authToken}`,
@@ -217,36 +84,16 @@ class OneDriveSync {
         if (!this.connectionHealthy) {
           this.connectionHealthy = true;
           if (this.onConnectionStatusChanged) {
-            this.onConnectionStatusChanged(true, "Connection restored");
-          }
-
-          // Nếu kết nối được khôi phục, kiểm tra xem có thay đổi file không
-          if (this.config.fileId) {
-            this.checkForChanges().catch((err) => {
-              console.error(
-                "[OneDrive] Error checking changes after reconnect:",
-                err
-              );
-            });
+            this.onConnectionStatusChanged(true, "Connection established");
           }
         }
 
         this.reconnectAttempts = 0;
       } else {
         console.warn(
-          "[OneDrive] Connection health check failed with status:",
-          response.status
+          "[OneDrive] Connection health check failed, attempting to refresh token"
         );
-
-        if (response.status === 401) {
-          // Token hết hạn
-          await this.refreshToken();
-        } else {
-          // Lỗi khác
-          throw new Error(
-            `Health check failed with status: ${response.status}`
-          );
-        }
+        await this.refreshAccessToken();
       }
     } catch (error) {
       console.error("[OneDrive] Health check error:", error);
@@ -348,6 +195,62 @@ class OneDriveSync {
     return this.msalInstance;
   }
 
+  // Initialize OneDrive sync
+  async init(options = {}) {
+    console.log("[OneDrive] Initializing OneDrive sync...");
+
+    try {
+      // Apply custom options
+      if (options.fileName) this.config.fileName = options.fileName;
+      if (options.filePath) this.config.filePath = options.filePath;
+      if (options.pollingInterval)
+        this.pollingInterval = options.pollingInterval;
+      if (options.onFileChanged) this.onFileChanged = options.onFileChanged;
+      if (options.onSyncError) this.onSyncError = options.onSyncError;
+      if (options.onSyncSuccess) this.onSyncSuccess = options.onSyncSuccess;
+      if (options.onConnectionStatusChanged)
+        this.onConnectionStatusChanged = options.onConnectionStatusChanged;
+
+      // Try to restore session
+      if (!this.isAuthenticated || !this.authToken) {
+        const accounts = this.getMsalInstance().getAllAccounts();
+
+        if (accounts.length > 0) {
+          console.log("[OneDrive] Restoring previous session");
+          await this.acquireToken();
+        } else {
+          console.log("[OneDrive] No previous session found");
+          await this.signIn();
+        }
+      }
+
+      // Get file ID if not already available
+      if (!this.config.fileId) {
+        await this.findFileId();
+      }
+
+      // Start polling for changes
+      this.startSyncPolling();
+
+      // Initialize connection status
+      this.connectionHealthy = true;
+      if (this.onConnectionStatusChanged) {
+        this.onConnectionStatusChanged(true, "Connected");
+      }
+
+      return true;
+    } catch (error) {
+      console.error("[OneDrive] Initialization failed:", error);
+      if (this.onSyncError) {
+        this.onSyncError("Failed to initialize OneDrive sync", error);
+      }
+
+      if (this.onConnectionStatusChanged) {
+        this.onConnectionStatusChanged(false, "Connection failed");
+      }
+    }
+  }
+
   // Sign in to Microsoft Graph API
   async signIn() {
     try {
@@ -422,6 +325,103 @@ class OneDriveSync {
       return this.config.fileId;
     } catch (error) {
       console.error("[OneDrive] Error finding file:", error);
+      throw error;
+    }
+  }
+
+  // Start polling for file changes
+  startSyncPolling() {
+    console.log(
+      `[OneDrive] Starting sync polling every ${
+        this.pollingInterval / 1000
+      } seconds`
+    );
+
+    // Clear any existing polling
+    if (this.syncInterval) {
+      clearInterval(this.syncInterval);
+    }
+
+    // Set up new polling interval
+    this.syncInterval = setInterval(() => {
+      this.checkForChanges().catch((error) => {
+        console.error("[OneDrive] Error checking for changes:", error);
+        this.retryCount++;
+
+        if (this.retryCount >= this.maxRetries) {
+          console.error(
+            `[OneDrive] Max retries (${this.maxRetries}) reached, stopping polling`
+          );
+          this.stopSyncPolling();
+
+          if (this.onSyncError) {
+            this.onSyncError("Sync polling stopped due to errors", error);
+          }
+        }
+      });
+    }, this.pollingInterval);
+  }
+
+  // Stop polling
+  stopSyncPolling() {
+    if (this.syncInterval) {
+      clearInterval(this.syncInterval);
+      this.syncInterval = null;
+    }
+  }
+
+  // Check for file changes
+  async checkForChanges() {
+    if (!this.config.fileId || !this.authToken) {
+      throw new Error("File ID or auth token not available");
+    }
+
+    try {
+      const response = await fetch(
+        `https://graph.microsoft.com/v1.0/me/drive/items/${this.config.fileId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${this.authToken}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        // Handle token expiration
+        if (response.status === 401) {
+          console.log("[OneDrive] Token expired, refreshing...");
+          await this.refreshToken();
+          return this.checkForChanges();
+        }
+        throw new Error(`Failed to check file: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      const newModifiedTime = data.lastModifiedDateTime;
+
+      // If the file has been modified since our last check
+      if (
+        !this.lastModifiedTime ||
+        new Date(newModifiedTime) > new Date(this.lastModifiedTime)
+      ) {
+        console.log(
+          `[OneDrive] File changed! Last: ${this.lastModifiedTime}, New: ${newModifiedTime}`
+        );
+        this.lastModifiedTime = newModifiedTime;
+        localStorage.setItem("oneDriveLastModified", this.lastModifiedTime);
+
+        // Download and process the updated file
+        await this.downloadAndProcessFile();
+      }
+
+      // Reset retry count on successful check
+      this.retryCount = 0;
+
+      if (this.onSyncSuccess) {
+        this.onSyncSuccess("Sync check completed successfully");
+      }
+    } catch (error) {
+      console.error("[OneDrive] Error checking for changes:", error);
       throw error;
     }
   }
