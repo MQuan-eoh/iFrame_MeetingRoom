@@ -1,4 +1,296 @@
 // Microsoft Graph API integration for OneDrive synchronization
+//============One Drive Feature================
+let oneDriveSync = null;
+// Initialize OneDrive integration
+function initializeOneDriveSync() {
+  console.log("[App] Initializing OneDrive integration...");
+
+  // Only initialize if the MSAL library is available
+  loadMicrosoftLibraries()
+    .then(() => {
+      oneDriveSync = new OneDriveSync();
+
+      oneDriveSync
+        .init({
+          fileName: "MeetingSchedule.xlsx", // Your Excel filename
+          pollingInterval: 60000, // Check every minute
+          onFileChanged: async (file) => {
+            console.log("[OneDrive] File changed, processing...");
+
+            // Show progress indicator
+            showProgressBar();
+            updateProgress(10, "Detected file change in OneDrive...");
+
+            try {
+              // Use your existing file processing logic
+              await handleFileUpload(file);
+
+              // Show success notification
+              showOneDriveNotification("File synchronized from OneDrive");
+            } catch (error) {
+              console.error("[OneDrive] Error processing synced file:", error);
+              showOneDriveNotification("Error synchronizing file", true);
+            }
+          },
+          onSyncError: (message, error) => {
+            console.error(`[OneDrive] Sync error: ${message}`, error);
+            showOneDriveNotification("OneDrive sync error", true);
+          },
+          onSyncSuccess: (message) => {
+            console.log(`[OneDrive] ${message}`);
+          },
+        })
+        .catch((error) => {
+          console.error(
+            "[OneDrive] Failed to initialize OneDrive sync:",
+            error
+          );
+        });
+    })
+    .catch((error) => {
+      console.error("Failed to load Microsoft libraries:", error);
+    });
+}
+
+// Helper function to load Microsoft libraries
+function loadMicrosoftLibraries() {
+  return new Promise((resolve, reject) => {
+    // Check if MSAL is already loaded
+    if (window.msal) {
+      resolve();
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src =
+      "https://alcdn.msauth.net/browser/2.30.0/js/msal-browser.min.js";
+    script.async = true;
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
+
+// Show OneDrive notification
+function showOneDriveNotification(message, isError = false) {
+  const notification = document.createElement("div");
+  notification.className =
+    "onedrive-sync-notification" + (isError ? " error" : "");
+  notification.innerHTML = `
+    <i class="fas ${isError ? "fa-exclamation-triangle" : "fa-sync-alt"}"></i>
+    ${message}
+  `;
+  document.body.appendChild(notification);
+
+  setTimeout(() => {
+    notification.classList.add("hide");
+    setTimeout(() => {
+      if (notification.parentNode) {
+        notification.parentNode.removeChild(notification);
+      }
+    }, 500);
+  }, 3000);
+}
+
+// Add this function to your existing document.addEventListener("DOMContentLoaded",...) block
+
+function addOneDriveSyncUI() {
+  const settingsContent = document.querySelector(".settings-content");
+  if (!settingsContent) return;
+
+  const oneDriveSection = document.createElement("div");
+  oneDriveSection.className = "onedrive-section";
+  oneDriveSection.innerHTML = `
+    <div class="onedrive-header">
+      <i class="fab fa-microsoft"></i> OneDrive Sync
+      <div class="onedrive-status">
+        <span class="status-dot"></span>
+        <span class="status-text">Disconnected</span>
+      </div>
+    </div>
+    <div class="onedrive-controls">
+      <button class="onedrive-connect-btn">Connect</button>
+      <button class="onedrive-sync-btn" disabled>Sync Now</button>
+    </div>
+    <div class="onedrive-info">
+      <div class="file-name">No file selected</div>
+      <div class="last-sync">Never synced</div>
+    </div>
+  `;
+
+  settingsContent.appendChild(oneDriveSection);
+
+  // Add styles
+  const oneDriveUIStyle = document.createElement("style");
+  oneDriveUIStyle.textContent = `
+    .onedrive-section {
+      background-color: rgba(255, 255, 255, 0.9);
+      border-radius: 8px;
+      padding: 15px;
+      margin-top: 15px;
+    }
+    
+    .onedrive-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      font-weight: 500;
+    }
+    
+    .onedrive-status {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.9em;
+    }
+    
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: #ff0000;
+    }
+    
+    .status-dot.connected {
+      background-color: #4CAF50;
+    }
+    
+    .onedrive-controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    
+    .onedrive-controls button {
+      padding: 8px 12px;
+      border-radius: 4px;
+      border: none;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    
+    .onedrive-connect-btn {
+      background-color: #0078d4;
+      color: white;
+    }
+    
+    .onedrive-sync-btn {
+      background-color: #6c757d;
+      color: white;
+    }
+    
+    .onedrive-sync-btn:not([disabled]) {
+      background-color: #28a745;
+    }
+    
+    .onedrive-info {
+      font-size: 0.9em;
+      color: #555;
+    }
+    
+    .file-name {
+      margin-bottom: 5px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  `;
+  document.head.appendChild(oneDriveUIStyle);
+
+  // Set up event handlers
+  const connectBtn = oneDriveSection.querySelector(".onedrive-connect-btn");
+  const syncBtn = oneDriveSection.querySelector(".onedrive-sync-btn");
+
+  connectBtn.addEventListener("click", async () => {
+    if (!oneDriveSync) {
+      initializeOneDriveSync();
+      return;
+    }
+
+    connectBtn.disabled = true;
+    connectBtn.textContent = "Connecting...";
+
+    try {
+      await oneDriveSync.signIn();
+      await oneDriveSync.findFileId();
+
+      updateOneDriveUI(true);
+      oneDriveSync.startSyncPolling();
+    } catch (error) {
+      console.error("Failed to connect to OneDrive:", error);
+      alert("Failed to connect to OneDrive. Please try again.");
+    } finally {
+      connectBtn.disabled = false;
+      connectBtn.textContent = "Connect";
+    }
+  });
+
+  syncBtn.addEventListener("click", async () => {
+    if (!oneDriveSync) return;
+
+    syncBtn.disabled = true;
+    syncBtn.textContent = "Syncing...";
+
+    try {
+      await oneDriveSync.checkForChanges();
+
+      // Update last sync time
+      const lastSyncEl = oneDriveSection.querySelector(".last-sync");
+      if (lastSyncEl) {
+        lastSyncEl.textContent = `Last sync: ${new Date().toLocaleTimeString()}`;
+      }
+    } catch (error) {
+      console.error("Failed to sync with OneDrive:", error);
+      alert("Failed to sync with OneDrive. Please try again.");
+    } finally {
+      syncBtn.disabled = false;
+      syncBtn.textContent = "Sync Now";
+    }
+  });
+
+  // Initial UI update if we have stored credentials
+  if (oneDriveSync && oneDriveSync.authToken) {
+    updateOneDriveUI(true);
+  }
+}
+
+// Helper function to update the UI state
+function updateOneDriveUI(isConnected) {
+  const oneDriveSection = document.querySelector(".onedrive-section");
+  if (!oneDriveSection) return;
+
+  const statusDot = oneDriveSection.querySelector(".status-dot");
+  const statusText = oneDriveSection.querySelector(".status-text");
+  const connectBtn = oneDriveSection.querySelector(".onedrive-connect-btn");
+  const syncBtn = oneDriveSection.querySelector(".onedrive-sync-btn");
+  const fileNameEl = oneDriveSection.querySelector(".file-name");
+  const lastSyncEl = oneDriveSection.querySelector(".last-sync");
+
+  if (isConnected) {
+    statusDot.classList.add("connected");
+    statusText.textContent = "Connected";
+    connectBtn.textContent = "Reconnect";
+    syncBtn.disabled = false;
+
+    if (oneDriveSync) {
+      fileNameEl.textContent = `File: ${oneDriveSync.config.fileName}`;
+
+      if (oneDriveSync.lastModifiedTime) {
+        const lastModified = new Date(oneDriveSync.lastModifiedTime);
+        lastSyncEl.textContent = `Last modified: ${lastModified.toLocaleString()}`;
+      }
+    }
+  } else {
+    statusDot.classList.remove("connected");
+    statusText.textContent = "Disconnected";
+    connectBtn.textContent = "Connect";
+    syncBtn.disabled = true;
+    fileNameEl.textContent = "No file selected";
+    lastSyncEl.textContent = "Never synced";
+  }
+}
+
 class OneDriveSync {
   constructor() {
     // Microsoft Graph API configuration
