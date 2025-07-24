@@ -13,7 +13,7 @@ function initializeOneDriveSync() {
       oneDriveSync
         .init({
           fileName: "MeetingSchedule.xlsx", // Your Excel filename
-          pollingInterval: 60000, // Check every minute
+          pollingInterval: 10000, // Check every 10 seconds
           onFileChanged: async (file) => {
             console.log("[OneDrive] File changed, processing...");
 
@@ -343,7 +343,7 @@ class OneDriveSync {
     this.healthCheckInterval = null; // New interval for connection health check
     this.retryCount = 0;
     this.maxRetries = 5; // Increased retries
-    this.pollingInterval = 30000; // Cập nhật thành 30 giây thay vì 10 giây
+    this.pollingInterval = 10000; 
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 10;
     this.tokenRefreshBuffer = 300000; // Refresh token 5 minutes before expiry
