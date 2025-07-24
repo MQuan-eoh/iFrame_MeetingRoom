@@ -2,6 +2,7 @@
 //============One Drive Feature================
 let oneDriveSync = null;
 // Initialize OneDrive integration
+// Fix for OneDrive sync issues - add to onFileChanged callback in initializeOneDriveSync()
 function initializeOneDriveSync() {
   console.log("[App] Initializing OneDrive integration...");
 
@@ -12,8 +13,8 @@ function initializeOneDriveSync() {
 
       oneDriveSync
         .init({
-          fileName: "MeetingSchedule.xlsx", // Your Excel filename
-          pollingInterval: 60000, // Check every minute
+          fileName: "MeetingSchedule.xlsx",
+          pollingInterval: 60000,
           onFileChanged: async (file) => {
             console.log("[OneDrive] File changed, processing...");
 
@@ -22,19 +23,64 @@ function initializeOneDriveSync() {
             updateProgress(10, "Detected file change in OneDrive...");
 
             try {
-              // Use your existing file processing logic
-              await handleFileUpload(file);
+              // Use your existing file processing logic with explicit result handling
+              const result = await handleFileUpload(file);
+              console.log("[OneDrive] File processing result:", result);
 
-              // Show success notification
-              showOneDriveNotification("File synchronized from OneDrive");
+              // Force UI update with a delay to ensure data is processed
+              setTimeout(() => {
+                console.log("[OneDrive] Forcing UI update after sync");
+
+                // Get current date and time for room status update
+                const currentDate = getCurrentDate();
+                const currentTime = getCurrentTime();
+
+                // Re-extract today's meetings from processed data
+                const fileCache = localStorage.getItem("fileCache");
+                if (fileCache) {
+                  try {
+                    const cachedData = JSON.parse(fileCache);
+                    if (cachedData && cachedData.data) {
+                      console.log(
+                        "[OneDrive] Found cached data, updating room status"
+                      );
+
+                      // Filter today's meetings
+                      const todayMeetings = cachedData.data.filter(
+                        (meeting) => meeting.date === currentDate
+                      );
+
+                      // Force update room status with latest data
+                      updateRoomStatus(todayMeetings);
+                      console.log(
+                        "[OneDrive] Room status updated with today's meetings:",
+                        todayMeetings.length
+                      );
+                    }
+                  } catch (cacheError) {
+                    console.error(
+                      "[OneDrive] Error parsing cached data:",
+                      cacheError
+                    );
+                  }
+                }
+
+                // Show success notification after UI update
+                showOneDriveNotification("File synchronized from OneDrive");
+
+                // Hide progress bar
+                hideProgressBar();
+              }, 1000);
             } catch (error) {
               console.error("[OneDrive] Error processing synced file:", error);
               showOneDriveNotification("Error synchronizing file", true);
+              hideProgressBar();
             }
           },
           onSyncError: (message, error) => {
             console.error(`[OneDrive] Sync error: ${message}`, error);
             showOneDriveNotification("OneDrive sync error", true);
+            hideProgressBar();
           },
           onSyncSuccess: (message) => {
             console.log(`[OneDrive] ${message}`);
@@ -261,27 +307,57 @@ function addOneDriveSyncUI() {
   });
   // Cập nhật event listener cho nút Sync Now
   syncBtn.addEventListener("click", async () => {
-    if (!oneDriveSync) return;
+    if (!oneDriveSync) {
+      console.error("[OneDrive] Cannot sync - OneDrive sync not initialized");
+      showOneDriveNotification("Cannot sync - please reconnect", true);
+      return;
+    }
 
     syncBtn.disabled = true;
     syncBtn.textContent = "Syncing...";
     syncBtn.classList.add("syncing");
 
     try {
-      // Gọi checkForChanges với force=true để bỏ qua kiểm tra thời gian
+      console.log("[OneDrive] Manual sync initiated");
+
+      // Clear any cached file data to ensure fresh download
+      localStorage.removeItem("tempFileCache");
+
+      // Force token refresh before sync
+      await oneDriveSync.acquireToken();
+
+      // Force sync regardless of last modified time
       await oneDriveSync.checkForChanges(true);
 
-      // Update last sync time
+      // Update last sync time in UI
       const lastSyncEl = oneDriveSection.querySelector(".last-sync");
       if (lastSyncEl) {
         lastSyncEl.textContent = `Last sync: ${new Date().toLocaleString()}`;
       }
-
-      // Hiển thị thông báo đồng bộ thành công
-      showOneDriveNotification("File synchronized successfully");
     } catch (error) {
-      console.error("Failed to sync with OneDrive:", error);
-      showOneDriveNotification("Failed to sync with OneDrive", true);
+      console.error("[OneDrive] Failed to sync with OneDrive:", error);
+
+      // Show more detailed error message
+      let errorMessage = "Failed to sync with OneDrive";
+      if (error.message) {
+        errorMessage += `: ${error.message}`;
+      }
+
+      showOneDriveNotification(errorMessage, true);
+
+      // Try to recover from auth errors
+      if (
+        error.message &&
+        (error.message.includes("token") || error.message.includes("auth"))
+      ) {
+        console.log("[OneDrive] Attempting to recover from auth error");
+        try {
+          await oneDriveSync.signIn();
+          showOneDriveNotification("Please try syncing again", true);
+        } catch (authError) {
+          console.error("[OneDrive] Auth recovery failed:", authError);
+        }
+      }
     } finally {
       syncBtn.disabled = false;
       syncBtn.textContent = "Sync Now";
@@ -816,56 +892,63 @@ class OneDriveSync {
   // Download and process the file when changed
   async downloadAndProcessFile() {
     try {
-      // Đặt flag đồng bộ
       this.isSyncing = true;
-
-      // Cập nhật UI để hiển thị đang đồng bộ
       this.updateSyncingUI(true);
 
       console.log(`[OneDrive] Downloading file with ID: ${this.config.fileId}`);
 
+      // Add timestamp to URL to prevent caching
+      const timestamp = new Date().getTime();
       const response = await fetch(
-        `https://graph.microsoft.com/v1.0/me/drive/items/${this.config.fileId}/content`,
+        `https://graph.microsoft.com/v1.0/me/drive/items/${this.config.fileId}/content?t=${timestamp}`,
         {
           headers: {
             Authorization: `Bearer ${this.authToken}`,
           },
-          // Thêm cache: 'no-store' để đảm bảo lấy phiên bản mới nhất
           cache: "no-store",
         }
       );
 
       if (!response.ok) {
-        throw new Error(`Failed to download file: ${response.statusText}`);
+        throw new Error(
+          `Failed to download file: ${response.status} ${response.statusText}`
+        );
       }
 
       const blob = await response.blob();
+
+      // Verify we got valid data
+      if (blob.size === 0) {
+        throw new Error("Downloaded file is empty");
+      }
+
+      console.log(
+        `[OneDrive] File downloaded successfully (${blob.size} bytes)`
+      );
+
       const file = new File([blob], this.config.fileName, {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       });
 
-      console.log("[OneDrive] File downloaded successfully, processing...");
-
       // Call the file change handler with the downloaded file
       if (this.onFileChanged) {
+        console.log("[OneDrive] Calling file changed handler");
         await this.onFileChanged(file);
+      } else {
+        console.error("[OneDrive] No file changed handler registered");
+        throw new Error("No file changed handler registered");
       }
 
-      // Cập nhật thời gian đồng bộ
       this.lastSyncTime = new Date();
       localStorage.setItem(
         "oneDriveLastSyncTime",
         this.lastSyncTime.toISOString()
       );
-
-      // Cập nhật UI sau khi đồng bộ hoàn tất
       this.updateSyncingUI(false);
 
       return file;
     } catch (error) {
       console.error("[OneDrive] Error downloading file:", error);
-
-      // Cập nhật UI khi có lỗi
       this.updateSyncingUI(false, true);
 
       if (this.onSyncError) {
@@ -873,7 +956,6 @@ class OneDriveSync {
       }
       throw error;
     } finally {
-      // Đảm bảo flag được reset
       this.isSyncing = false;
     }
   }
