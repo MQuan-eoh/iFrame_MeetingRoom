@@ -406,7 +406,42 @@ function updateOneDriveUI(isConnected) {
     lastSyncEl.textContent = "Never synced";
   }
 }
+function forceRoomStatusUpdate() {
+  console.log("[App] Forcing room status update");
 
+  const currentDate = getCurrentDate();
+  const currentTime = getCurrentTime();
+
+  // Get cached data
+  const fileCache = localStorage.getItem("fileCache");
+  if (!fileCache) {
+    console.log("[App] No cached data available for room update");
+    return;
+  }
+
+  try {
+    const cachedData = JSON.parse(fileCache);
+    if (cachedData && cachedData.data) {
+      // Filter today's meetings
+      const todayMeetings = cachedData.data.filter(
+        (meeting) => meeting.date === currentDate
+      );
+
+      console.log(
+        `[App] Updating room status with ${todayMeetings.length} meetings`
+      );
+      updateRoomStatus(todayMeetings);
+
+      // Ensure single room updates work too
+      const roomsToUpdate = ["Phòng họp lầu 4", "Phòng họp lầu 3"];
+      roomsToUpdate.forEach((roomName) => {
+        updateSingleRoomStatus(roomName, todayMeetings, currentTime);
+      });
+    }
+  } catch (error) {
+    console.error("[App] Error forcing room status update:", error);
+  }
+}
 class OneDriveSync {
   constructor() {
     // Microsoft Graph API configuration

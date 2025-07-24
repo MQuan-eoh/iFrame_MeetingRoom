@@ -3395,21 +3395,29 @@ function handleOneDriveFileChanged(file) {
       setTimeout(() => {
         const currentDate = getCurrentDate();
         const currentTime = getCurrentTime();
-
+        updateScheduleTable(data);
         console.log("[OneDrive] Re-initializing room sections after sync");
 
         // Filter today's meetings
         const todayMeetings = data.filter(
           (meeting) => meeting.date === currentDate
         );
-
+        // Store data in localStorage for reuse
+        localStorage.setItem(
+          "fileCache",
+          JSON.stringify({
+            timestamp: Date.now(),
+            data: data,
+          })
+        );
+        forceRoomStatusUpdate();
         // Update room status with latest data
         updateRoomStatus(todayMeetings);
 
         showOneDriveNotification("Đồng bộ dữ liệu từ OneDrive thành công");
       }, 500);
-
       saveLastSyncTime();
+      return data;
     })
     .catch((error) => {
       console.error("[OneDrive] Error processing synced file:", error);
