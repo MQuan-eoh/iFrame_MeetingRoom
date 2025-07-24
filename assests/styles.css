@@ -851,7 +851,6 @@
 /* Thêm styles cho dark mode nếu cần */
 @media (prefers-color-scheme: dark) {
   .room-buttons {
-    background: #1a1a1a;
     box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.3);
   }
 }
