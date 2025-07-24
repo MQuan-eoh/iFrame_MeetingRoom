@@ -2273,19 +2273,28 @@ function renderRoomPage(data, roomKeyword, roomName) {
     "0"
   )}:${String(currentTime.getMinutes()).padStart(2, "0")}`;
 
-  // Tìm cuộc họp đang diễn ra
+  // Find active meeting (current time within meeting timeframe and not ended)
   const currentMeeting = filteredData.find((meeting) => {
     const startTime = meeting.startTime;
     const endTime = meeting.endTime;
-    return currentTimeStr >= startTime && currentTimeStr <= endTime;
+    return (
+      currentTimeStr >= startTime &&
+      currentTimeStr <= endTime &&
+      !meeting.isEnded &&
+      !meeting.forceEndedByUser
+    );
   });
   console.log("Current meeting:", currentMeeting);
 
-  // Lọc các cuộc họp sắp diễn ra
+  // Filter upcoming meetings (not ended and start time is after current time)
   const upcomingMeetings = filteredData
     .filter((meeting) => {
       const startTime = meeting.startTime;
-      return currentTimeStr <= startTime;
+      return (
+        currentTimeStr <= startTime &&
+        !meeting.isEnded &&
+        !meeting.forceEndedByUser
+      );
     })
     .sort((a, b) => {
       const timeA = a.startTime.split(":").map(Number);
@@ -2465,7 +2474,11 @@ function renderRoomPage(data, roomKeyword, roomName) {
             currentMeeting ? currentMeeting.purpose : "Chưa xác định"
           }</div>
         </div>
-        <button class="end-meeting">END MEETING</button>
+        ${
+          currentMeeting
+            ? '<button class="end-meeting">END MEETING</button>'
+            : '<div class="no-meeting-placeholder">Không có cuộc họp đang diễn ra</div>'
+        }
       </div>
       <div class="right-panel">
         <h2>LỊCH HỌP PHÒNG ${roomName.toUpperCase()}</h2>
@@ -2632,7 +2645,18 @@ function isValidMeetingState(meeting, currentTime) {
 }
 
 function handleEndMeeting(event) {
-  // Hiển thị hộp thoại xác nhận
+  // Show confirmation dialog first
+  const isConfirmed = confirm(
+    "Bạn có chắc chắn muốn kết thúc cuộc họp này không?"
+  );
+
+  // If user selects "No", exit the function
+  if (!isConfirmed) {
+    console.log("End meeting rejected by user");
+    return;
+  }
+
+  // Get cached data
   const cachedData = JSON.parse(localStorage.getItem("fileCache"));
   if (!cachedData || !cachedData.data) {
     console.error("No meeting data found!");
@@ -2642,14 +2666,38 @@ function handleEndMeeting(event) {
   const data = cachedData.data;
   const currentTime = getCurrentTime();
   const currentDate = getCurrentDate();
-  const roomName = event.target
-    .closest(".main-panel")
-    .querySelector("h1").textContent;
 
-  // Tìm cuộc họp hiện tại
+  // Get room name from DOM - try multiple selectors to be safe
+  let roomName = null;
+  const mainPanel = event.target.closest(".main-panel");
+  if (mainPanel) {
+    const h1Element = mainPanel.querySelector("h1");
+    if (h1Element) {
+      roomName = h1Element.textContent.trim();
+    }
+  }
+
+  // Fallback: try to get room name from page title or other sources
+  if (!roomName) {
+    const pageTitle = document.querySelector(
+      ".room-title, .meeting-room-title, h1"
+    );
+    if (pageTitle) {
+      roomName = pageTitle.textContent.trim();
+    }
+  }
+
+  // If still no room name, try to determine from URL or context
+  if (!roomName) {
+    console.error("Could not determine room name from DOM");
+    return;
+  }
+
+  console.log("Ending meeting for room:", roomName);
+
+  // Find current meeting using the extracted room name
   const roomMeetings = data.filter(
-    (meeting) =>
-      normalizeRoomKey(meeting.room) === normalizeRoomKey(roomKeyword)
+    (meeting) => normalizeRoomKey(meeting.room) === normalizeRoomKey(roomName)
   );
 
   const currentMeeting = roomMeetings.find((meeting) =>
@@ -2663,29 +2711,29 @@ function handleEndMeeting(event) {
     );
 
     if (currentMeetingIndex !== -1) {
-      // Cập nhật thông tin cuộc họp với flag đặc biệt
+      // Update meeting information with special flag
       updatedData[currentMeetingIndex] = {
         ...currentMeeting,
         endTime: currentTime,
         isEnded: true,
         lastUpdated: new Date().getTime(),
         originalEndTime: currentMeeting.endTime,
-        forceEndedByUser: true, // Thêm flag mới để đánh dấu cuộc họp đã được kết thúc bởi người dùng
+        forceEndedByUser: true, // Add new flag to mark meeting ended by user
       };
 
-      // Cập nhật cache và localStorage
+      // Update cache and localStorage
       fileCache.data = updatedData;
       fileCache.lastModified = new Date().getTime();
 
       localStorage.setItem(
         "fileCache",
         JSON.stringify({
-          data: mergedData, // PHẢI là mergedData, không phải fileCache.data
+          data: updatedData, // Use updatedData, not mergedData
           lastModified: new Date().getTime(),
         })
       );
 
-      // Lọc lại các cuộc họp trong ngày
+      // Filter meetings for today
       const todayMeetings = updatedData.filter((meeting) => {
         const meetingDate = new Date(
           meeting.date.split("/").reverse().join("-")
@@ -2696,14 +2744,13 @@ function handleEndMeeting(event) {
         return meetingDate.toDateString() === currentDateObj.toDateString();
       });
 
-      // Cập nhật giao diện
+      // Update UI - first update room status and schedule table
       updateRoomStatus(updatedData);
       updateScheduleTable(todayMeetings);
-      renderRoomPage(
-        updatedData,
-        roomName.toLowerCase().replace(/\s+/g, "-"),
-        roomName.toLowerCase().replace(/\s+/g, "-")
-      );
+
+      // Re-render the current room page with updated data
+      const roomKeywordForRender = roomName.toLowerCase().replace(/\s+/g, "-");
+      renderRoomPage(updatedData, roomName, roomName);
 
       console.log(`Meeting ended early:`, {
         room: roomName,
@@ -2712,31 +2759,18 @@ function handleEndMeeting(event) {
         isEnded: true,
         forceEndedByUser: true,
       });
+
+      // Show success notification
+      alert(`Cuộc họp tại ${roomName} đã được kết thúc lúc ${currentTime}`);
     }
+  } else {
+    console.log("No active meeting found to end");
+    alert("Không tìm thấy cuộc họp đang diễn ra để kết thúc");
   }
 }
 
 // Đảm bảo handlers được setup khi DOM ready
 document.addEventListener("DOMContentLoaded", setupEndMeetingHandlers);
-// Thêm sự kiện cho nút "End Meeting"
-document.addEventListener("DOMContentLoaded", function () {
-  const dynamicContent = document.getElementById("dynamicPageContent");
-
-  dynamicContent.addEventListener("click", function (event) {
-    if (event.target.classList.contains("end-meeting")) {
-      handleEndMeeting(event);
-      const isConfirmed = confirm(
-        "Bạn có chắc chắn muốn kết thúc cuộc họp này không?"
-      );
-
-      // Nếu người dùng chọn "No", thoát khỏi hàm
-      if (!isConfirmed) {
-        console.log("Reject end meeting");
-        return;
-      }
-    }
-  });
-});
 
 // Thêm CSS cho styling
 const style = document.createElement("style");
@@ -2750,6 +2784,36 @@ style.textContent = `
     border-radius: 50%;
     background-color: #ff0000;
     margin-right: 5px;
+  }
+  .no-meeting-placeholder {
+    background-color: #f8f9fa;
+    border: 2px dashed #dee2e6;
+    border-radius: 8px;
+    padding: 20px;
+    text-align: center;
+    color: #6c757d;
+    font-style: italic;
+    margin-top: 20px;
+  }
+  .end-meeting {
+    background-color: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 15px 30px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-top: 20px;
+  }
+  .end-meeting:hover {
+    background-color: #c82333;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  }
+  .end-meeting:active {
+    transform: translateY(0);
   }
 `;
 document.head.appendChild(style);
