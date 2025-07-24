@@ -226,15 +226,26 @@ function addOneDriveSyncUI() {
   const syncBtn = oneDriveSection.querySelector(".onedrive-sync-btn");
 
   connectBtn.addEventListener("click", async () => {
-    if (!oneDriveSync) {
-      initializeOneDriveSync();
-      return;
-    }
-
     connectBtn.disabled = true;
     connectBtn.textContent = "Connecting...";
 
     try {
+      // If oneDriveSync isn't initialized yet, initialize it and wait
+      if (!oneDriveSync) {
+        await new Promise((resolve, reject) => {
+          loadMicrosoftLibraries()
+            .then(() => {
+              oneDriveSync = new OneDriveSync();
+              resolve();
+            })
+            .catch((err) => {
+              console.error("Failed to load Microsoft libraries:", err);
+              reject(err);
+            });
+        });
+      }
+
+      // Now that we have oneDriveSync, proceed with authentication
       await oneDriveSync.signIn();
       await oneDriveSync.findFileId();
 
@@ -248,7 +259,6 @@ function addOneDriveSyncUI() {
       connectBtn.textContent = "Connect";
     }
   });
-
   // Cập nhật event listener cho nút Sync Now
   syncBtn.addEventListener("click", async () => {
     if (!oneDriveSync) return;
