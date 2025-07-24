@@ -5,50 +5,50 @@ let oneDriveSync = null;
 function initializeOneDriveSync() {
   console.log("[App] Initializing OneDrive integration...");
 
+  // Prevent duplicate initialization
+  if (oneDriveSync) {
+    console.log("[App] OneDrive sync already initialized");
+    return Promise.resolve(oneDriveSync);
+  }
+
   // Only initialize if the MSAL library is available
-  loadMicrosoftLibraries()
+  return loadMicrosoftLibraries()
     .then(() => {
       oneDriveSync = new OneDriveSync();
 
-      oneDriveSync
-        .init({
-          fileName: "MeetingSchedule.xlsx", // Your Excel filename
-          pollingInterval: 10000, // Check every 10 seconds
-          onFileChanged: async (file) => {
-            console.log("[OneDrive] File changed, processing...");
+      return oneDriveSync.init({
+        fileName: "MeetingSchedule.xlsx", // Your Excel filename
+        pollingInterval: 10000, // Check every 10 seconds
+        onFileChanged: async (file) => {
+          console.log("[OneDrive] File changed, processing...");
 
-            // Show progress indicator
-            showProgressBar();
-            updateProgress(10, "Detected file change in OneDrive...");
+          // Show progress indicator
+          showProgressBar();
+          updateProgress(10, "Detected file change in OneDrive...");
 
-            try {
-              // Use your existing file processing logic
-              await handleFileUpload(file);
+          try {
+            // Use your existing file processing logic
+            await handleFileUpload(file);
 
-              // Show success notification
-              showOneDriveNotification("File synchronized from OneDrive");
-            } catch (error) {
-              console.error("[OneDrive] Error processing synced file:", error);
-              showOneDriveNotification("Error synchronizing file", true);
-            }
-          },
-          onSyncError: (message, error) => {
-            console.error(`[OneDrive] Sync error: ${message}`, error);
-            showOneDriveNotification("OneDrive sync error", true);
-          },
-          onSyncSuccess: (message) => {
-            console.log(`[OneDrive] ${message}`);
-          },
-        })
-        .catch((error) => {
-          console.error(
-            "[OneDrive] Failed to initialize OneDrive sync:",
-            error
-          );
-        });
+            // Show success notification
+            showOneDriveNotification("File synchronized from OneDrive");
+          } catch (error) {
+            console.error("[OneDrive] Error processing synced file:", error);
+            showOneDriveNotification("Error synchronizing file", true);
+          }
+        },
+        onSyncError: (message, error) => {
+          console.error(`[OneDrive] Sync error: ${message}`, error);
+          showOneDriveNotification("OneDrive sync error", true);
+        },
+        onSyncSuccess: (message) => {
+          console.log(`[OneDrive] ${message}`);
+        },
+      });
     })
     .catch((error) => {
-      console.error("Failed to load Microsoft libraries:", error);
+      console.error("[OneDrive] Failed to initialize OneDrive sync:", error);
+      throw error;
     });
 }
 
@@ -226,26 +226,67 @@ function addOneDriveSyncUI() {
   const syncBtn = oneDriveSection.querySelector(".onedrive-sync-btn");
 
   connectBtn.addEventListener("click", async () => {
-    if (!oneDriveSync) {
-      initializeOneDriveSync();
-      return;
-    }
-
     connectBtn.disabled = true;
     connectBtn.textContent = "Connecting...";
 
     try {
-      await oneDriveSync.signIn();
-      await oneDriveSync.findFileId();
+      // Initialize OneDriveSync if not already done
+      if (!oneDriveSync) {
+        console.log(
+          "[OneDrive] Initializing OneDrive sync for first connection..."
+        );
+
+        // Load Microsoft libraries first
+        await loadMicrosoftLibraries();
+
+        // Create new OneDriveSync instance
+        oneDriveSync = new OneDriveSync();
+
+        // Initialize with default config
+        await oneDriveSync.init({
+          fileName: "MeetingSchedule.xlsx",
+          pollingInterval: 10000,
+          onFileChanged: async (file) => {
+            console.log("[OneDrive] File changed, processing...");
+            showProgressBar();
+            updateProgress(10, "Detected file change in OneDrive...");
+
+            try {
+              await handleFileUpload(file);
+              showOneDriveNotification("File synchronized from OneDrive");
+            } catch (error) {
+              console.error("[OneDrive] Error processing synced file:", error);
+              showOneDriveNotification("Error synchronizing file", true);
+            }
+          },
+          onSyncError: (message, error) => {
+            console.error(`[OneDrive] Sync error: ${message}`, error);
+            showOneDriveNotification("OneDrive sync error", true);
+          },
+          onSyncSuccess: (message) => {
+            console.log(`[OneDrive] ${message}`);
+          },
+        });
+      } else {
+        // If already initialized, just perform sign-in and find file
+        await oneDriveSync.signIn();
+        await oneDriveSync.findFileId();
+        oneDriveSync.startSyncPolling();
+      }
 
       updateOneDriveUI(true);
-      oneDriveSync.startSyncPolling();
+      showOneDriveNotification("Successfully connected to OneDrive");
     } catch (error) {
       console.error("Failed to connect to OneDrive:", error);
-      alert("Failed to connect to OneDrive. Please try again.");
+      showOneDriveNotification(
+        "Failed to connect to OneDrive. Please try again.",
+        true
+      );
+      updateOneDriveUI(false);
     } finally {
       connectBtn.disabled = false;
-      connectBtn.textContent = "Connect";
+      connectBtn.textContent =
+        oneDriveSync && oneDriveSync.isAuthenticated ? "Reconnect" : "Connect";
     }
   });
 
@@ -343,7 +384,7 @@ class OneDriveSync {
     this.healthCheckInterval = null; // New interval for connection health check
     this.retryCount = 0;
     this.maxRetries = 5; // Increased retries
-    this.pollingInterval = 10000; 
+    this.pollingInterval = 10000;
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 10;
     this.tokenRefreshBuffer = 300000; // Refresh token 5 minutes before expiry
@@ -544,7 +585,23 @@ class OneDriveSync {
 
         if (accounts.length > 0) {
           console.log("[OneDrive] Restoring previous session");
-          await this.acquireToken();
+          try {
+            await this.acquireToken();
+            console.log("[OneDrive] Session restored successfully");
+          } catch (error) {
+            console.log("[OneDrive] Failed to restore session:", error);
+            if (!silentMode) {
+              console.log("[OneDrive] Attempting interactive sign-in...");
+              await this.signIn();
+            } else {
+              console.log(
+                "[OneDrive] Silent mode enabled, skipping interactive sign-in"
+              );
+              throw new Error(
+                "Authentication required but silent mode enabled"
+              );
+            }
+          }
         } else if (!silentMode) {
           // Only attempt interactive sign-in if not in silent mode
           console.log(
@@ -555,19 +612,23 @@ class OneDriveSync {
           console.log(
             "[OneDrive] No previous session found and silent mode enabled, skipping auth"
           );
-          throw new Error("Authentication required but silent mode enabled");
+          // Don't throw error in silent mode, just continue without authentication
+          console.log(
+            "[OneDrive] Continuing without authentication in silent mode"
+          );
+          return false; // Return false to indicate no authentication
         }
       }
 
-      // Get file ID if not already available
-      if (!this.config.fileId) {
+      // Get file ID if not already available and we're authenticated
+      if (this.isAuthenticated && !this.config.fileId) {
         // Try to get file ID from localStorage first
         const storedFileId = localStorage.getItem("oneDriveFileId");
         if (storedFileId) {
           this.config.fileId = storedFileId;
           console.log(`[OneDrive] Using stored file ID: ${this.config.fileId}`);
-        } else if (this.isAuthenticated) {
-          // Only find file ID if authenticated
+        } else {
+          // Find file ID if authenticated
           await this.findFileId();
         }
       }
@@ -592,6 +653,14 @@ class OneDriveSync {
 
       if (this.onConnectionStatusChanged) {
         this.onConnectionStatusChanged(false, "Connection failed");
+      }
+
+      // In silent mode, don't throw error, just log it
+      if (options.silentMode) {
+        console.log(
+          "[OneDrive] Silent mode enabled, continuing without OneDrive sync"
+        );
+        return false;
       }
 
       throw error;

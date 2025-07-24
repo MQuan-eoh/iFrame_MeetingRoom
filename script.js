@@ -545,10 +545,18 @@ function hideProgressBar() {
 document.addEventListener("DOMContentLoaded", function () {
   PeopleDetectionSystem.initialize();
   addOneDriveSyncUI();
-  // Initialize OneDrive if needed
-  if (localStorage.getItem("oneDriveAuthToken")) {
-    initializeOneDriveSync();
+
+  // Initialize OneDrive if there's a stored auth token and oneDriveSync is not yet initialized
+  if (localStorage.getItem("oneDriveAuthToken") && !oneDriveSync) {
+    console.log("[App] Found stored auth token, initializing OneDrive...");
+    initializeOneDriveSync().catch((error) => {
+      console.error(
+        "[App] Failed to initialize OneDrive with stored token:",
+        error
+      );
+    });
   }
+
   autoConnectAndSyncOneDrive()
     .then(() => {
       console.log("[App] Auto-connect process completed");
@@ -3328,6 +3336,7 @@ async function autoConnectAndSyncOneDrive() {
 
       // Khởi tạo OneDrive nếu chưa có
       if (!oneDriveSync) {
+        console.log("[App] Initializing OneDrive for auto-connect...");
         await loadMicrosoftLibraries();
         oneDriveSync = new OneDriveSync();
 
