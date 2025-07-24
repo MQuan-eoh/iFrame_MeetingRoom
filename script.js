@@ -2263,7 +2263,7 @@ function renderRoomPage(data, roomKeyword, roomName) {
     if (!container) return;
 
     container.addEventListener("click", (e) => {
-      const acCard = e.target.closest(".device-control-card");
+      const acCard = e.target.closest(".ac-card");
       if (!acCard) return;
 
       // Normalize room name to lowercase
@@ -2285,7 +2285,7 @@ function renderRoomPage(data, roomKeyword, roomName) {
       }
 
       // Xử lý nút bật/tắt
-      if (e.target.closest(".device-power-btn")) {
+      if (e.target.closest(".controls .btn:first-child")) {
         acStates[room].isOn = !acStates[room].isOn;
         updateACStatus(acCard, room);
       }
@@ -2327,41 +2327,23 @@ function renderRoomPage(data, roomKeyword, roomName) {
             </div>
             </div>
           </div>
-          <div class="device-control-card" data-room="${roomName.toLowerCase()}">
-            <div class="card-header">
-              <div class="device-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                </svg>
-              </div>
-              <div class="device-header-content">
-                <h3 class="device-title">
-                  <span class="device-type">Công tắc đèn</span>
-                  <span class="room-name">${roomName}</span>
-                </h3>
-                <div class="device-subtitle">Điều khiển thiết bị thông minh</div>
-              </div>
-            </div>
-            
-            <div class="card-body">
-              <div class="device-controls">
-                <button class="device-power-btn" aria-label="Bật/Tắt đèn">
-                  <div class="power-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                      <path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10" />
-                    </svg>
-                  </div>
-                  <span class="btn-text">BẬT/TẮT</span>
-                </button>
-              </div>
+          <div class="ac-card"data-room="${roomName.toLowerCase()}">
+            <div class="card-content">
+              <img alt="Air conditioner icon" height="30" src="https://storage.googleapis.com/a1aa/image/njDqCVkQeJWBSiJfuEdErKceXH7wtLOLqr3glGdBuqpkg6EoA.jpg" width="30" />
+              <div class="main-content">
+                <h3 class="title">Đèn ${roomName}</h3>
 
-              <div class="device-status">
-                <div class="status-indicator">
-                  <div class="status-dot offline"></div>
-                  <span class="status-text">Ngoại tuyến</span>
+                <div class="controls">
+                  <button class="btn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                      <path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10" stroke-width="2" />
+                    </svg>
+                  </button>
                 </div>
-                <div class="last-updated">
-                  <span>Cập nhật lần cuối: --:--</span>
+
+                <div class="status-air">
+                  <div class="status-air-dot"></div>
+                  <span>Offline</span>
                 </div>
               </div>
             </div>
@@ -2695,9 +2677,15 @@ document.addEventListener("DOMContentLoaded", setupEndMeetingHandlers);
 // Thêm CSS cho styling
 const style = document.createElement("style");
 style.textContent = `
-  .device-power-btn.active {
-    background: linear-gradient(145deg, #10b981 0%, #059669 100%) !important;
-    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3), 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+  .controls .btn.active {
+    color: white;
+  }
+  .status-air-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: #ff0000;
+    margin-right: 5px;
   }
   .no-meeting-placeholder {
     background-color: #f8f9fa;
@@ -2954,10 +2942,9 @@ function updateACStatus(container, room) {
   const powerStats = getRoomPowerStats(eraSuffix);
 
   // Get all UI elements
-  const statusDot = container.querySelector(".status-dot");
-  const statusText = container.querySelector(".status-text");
-  const powerButton = container.querySelector(".device-power-btn");
-  const lastUpdated = container.querySelector(".last-updated span");
+  const statusDot = container.querySelector(".status-air-dot");
+  const statusText = container.querySelector(".status-air span");
+  const powerButton = container.querySelector(".controls .btn");
 
   // Debug: Log UI elements
   console.log(`[DEBUG] UI Elements for ${room}:`, {
@@ -2984,37 +2971,21 @@ function updateACStatus(container, room) {
       // Update UI elements with null checks
       if (statusDot && statusText) {
         if (isActuallyRunning) {
-          statusDot.className = "status-dot online";
-          statusText.textContent = "Trực tuyến";
+          statusDot.style.backgroundColor = "#4CAF50";
+          statusText.textContent = "Online";
         } else {
-          statusDot.className = "status-dot offline";
-          statusText.textContent = "Ngoại tuyến";
+          statusDot.style.backgroundColor = "#ff0000";
+          statusText.textContent = "Offline";
         }
-      }
-
-      // Update last updated timestamp
-      if (lastUpdated) {
-        const now = new Date();
-        const timeStr = now.toLocaleTimeString("vi-VN", {
-          hour: "2-digit",
-          minute: "2-digit",
-        });
-        lastUpdated.textContent = `Cập nhật lần cuối: ${timeStr}`;
       }
 
       if (powerButton) {
         if (isActuallyRunning) {
           powerButton.classList.add("active");
-          powerButton.style.background =
-            "linear-gradient(145deg, #10b981 0%, #059669 100%)";
-          powerButton.style.boxShadow =
-            "0 4px 12px rgba(16, 185, 129, 0.3), 0 1px 3px rgba(0, 0, 0, 0.1)";
+          powerButton.style.backgroundColor = "#4CAF50";
         } else {
           powerButton.classList.remove("active");
-          powerButton.style.background =
-            "linear-gradient(145deg, #4f46e5 0%, #6366f1 100%)";
-          powerButton.style.boxShadow =
-            "0 4px 12px rgba(79, 70, 229, 0.3), 0 1px 3px rgba(0, 0, 0, 0.1)";
+          powerButton.style.backgroundColor = "#6c757d";
         }
       }
 
