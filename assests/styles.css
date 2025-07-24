@@ -207,11 +207,9 @@
 }
 @media (max-width: 676px) {
   .table-header {
-    font-size: 0.4rem;
     margin-bottom: 0.3rem;
   }
   .table-row {
-    font-size: 0.2rem;
     margin-bottom: 0.3rem;
   }
 }
@@ -1038,28 +1036,28 @@ schedule-table {
 .table-row > div:nth-child(1) {
   /* TT */
   flex: 0 0 3%;
-  font-size: 0.25rem;
+
 }
 
 .table-header > div:nth-child(2),
 .table-row > div:nth-child(2) {
   /* Ngày */
   flex: 0 0 9%;
-  font-size: 0.25rem;
+
 }
 
 .table-header > div:nth-child(3),
 .table-row > div:nth-child(3) {
   /* Thứ */
   flex: 0 0 10%;
-  font-size: 0.25rem;
+
 }
 
 .table-header > div:nth-child(4),
 .table-row > div:nth-child(4) {
   /* Phòng */
   flex: 0 0 12%;
-  font-size: 0.25rem;
+
 }
 
 .table-header > div:nth-child(5),
@@ -1068,28 +1066,26 @@ schedule-table {
 .table-row > div:nth-child(6) {
   /* Giờ kết thúc */
   flex: 0 0 8%;
-  font-size: 0.25rem;
+
 }
 
 .table-header > div:nth-child(7),
 .table-row > div:nth-child(7) {
   /* Thời gian SD */
   flex: 0 0 10%;
-  font-size: 0.25rem;
+
 }
 
 .table-header > div:nth-child(8),
 .table-row > div:nth-child(8) {
   /* Mục đích */
   flex: 1 0 14%;
-  font-size: 0.25rem;
 }
 
 .table-header > div:nth-child(9),
 .table-row > div:nth-child(9) {
   /* Nội dung */
   flex: 2 0 15%;
-  font-size: 0.25rem;
 }
 
 /* Responsive cho iPad (768px) */
