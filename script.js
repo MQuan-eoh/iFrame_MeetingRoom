@@ -2095,15 +2095,9 @@ let action = {
 let acStates = {
   "Phòng họp lầu 3": {
     isOn: false,
-    roomTemperatures: 20,
-    minTemp: 16,
-    maxTemp: 30,
   },
   "Phòng họp lầu 4": {
     isOn: false,
-    roomTemperatures: 19,
-    minTemp: 16,
-    maxTemp: 30,
   },
 };
 const roomSuffixMap = {
@@ -2191,9 +2185,6 @@ function renderRoomPage(data, roomKeyword, roomName) {
     console.log(`Initializing new state for room ${roomKey}`);
     acStates[roomKey] = {
       isOn: false,
-      roomTemperatures: 20,
-      minTemp: 16,
-      maxTemp: 30,
       temproom: powerStats.tempValue,
       humidity: powerStats.humiValue,
     };
@@ -2210,42 +2201,7 @@ function renderRoomPage(data, roomKeyword, roomName) {
   //   clearInterval(roomUpdateIntervals[roomKey]);
   // }
 
-  updateACStatus = function (container, room) {
-    console.log("=== AC Status Update Debug ===");
-    console.log(`Updating AC status for room: ${room}`);
-    console.log("TempRoom AC state:", acStates[room]);
-
-    const roomKey = normalizeRoomKey(room);
-    const eraSuffix = roomEraMap[roomKey];
-    console.log(
-      `Getting real-time stats for ${room} (ERA suffix: ${eraSuffix})`
-    );
-
-    const powerStats = getRoomPowerStats(eraSuffix);
-    console.log("TempRoom power stats:", powerStats);
-
-    console.log("Updated AC state:", acStates[room]);
-  };
-
   // Add debug logging to the eraWidget onValues callback
-
-  eraWidget.init.onValues = function (values) {
-    console.log("=== ERA Widget Values Update Debug ===");
-    console.log("Received values:", values);
-
-    if (config25PM && values[config25PM.id]) {
-      console.log(
-        `Room ${roomKey} temproom value update:`,
-        values[config25PM.id].value
-      );
-    }
-    if (configPower && values[configPower.id]) {
-      console.log(
-        `Room ${roomKey} power value update:`,
-        values[configPower.id].value
-      );
-    }
-  };
   const valueAirMap = {
     "phòng họp lầu 3": valueAir1,
     "phòng họp lầu 4": valueAir2,
@@ -2325,53 +2281,13 @@ function renderRoomPage(data, roomKeyword, roomName) {
       if (!acStates[room]) {
         acStates[room] = {
           isOn: false,
-          roomTemperatures: 20,
-          minTemp: 16,
-          maxTemp: 30,
         };
       }
-
-      // Chọn phần tử hiển thị nhiệt độ
-      const tempDisplay = acCard.querySelector(".temperature-air");
 
       // Xử lý nút bật/tắt
       if (e.target.closest(".controls .btn:first-child")) {
         acStates[room].isOn = !acStates[room].isOn;
         updateACStatus(acCard, room);
-      }
-
-      // Xử lý giảm nhiệt độ
-      if (e.target.closest(".controls .btn:nth-child(3)")) {
-        if (
-          acStates[room].isOn &&
-          acStates[room].roomTemperatures > acStates[room].minTemp
-        ) {
-          acStates[room].roomTemperatures--;
-          console.log("Decrease temperature", acStates[room].roomTemperatures);
-          if (tempDisplay) {
-            tempDisplay.textContent = `${acStates[room].roomTemperatures}°C`;
-            eraWidget.triggerAction(valueAir.action, null, {
-              value: acStates[room].roomTemperatures,
-            });
-          }
-        }
-      }
-
-      // Xử lý tăng nhiệt độ
-      if (e.target.closest(".btn-up")) {
-        if (
-          acStates[room].isOn &&
-          acStates[room].roomTemperatures < acStates[room].maxTemp
-        ) {
-          acStates[room].roomTemperatures++;
-          console.log("Increase temperature", acStates[room].roomTemperatures);
-          if (tempDisplay) {
-            tempDisplay.textContent = `${acStates[room].roomTemperatures}°C`;
-            eraWidget.triggerAction(valueAir.action, null, {
-              value: acStates[room].roomTemperatures,
-            });
-          }
-        }
       }
     });
   }, 0);
@@ -2415,26 +2331,12 @@ function renderRoomPage(data, roomKeyword, roomName) {
             <div class="card-content">
               <img alt="Air conditioner icon" height="30" src="https://storage.googleapis.com/a1aa/image/njDqCVkQeJWBSiJfuEdErKceXH7wtLOLqr3glGdBuqpkg6EoA.jpg" width="30" />
               <div class="main-content">
-                <h3 class="title">Máy lạnh ${roomName}</h3>
+                <h3 class="title">Công tắc đèn ${roomName}</h3>
 
                 <div class="controls">
                   <button class="btn">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                       <path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10" stroke-width="2" />
-                    </svg>
-                  </button>
-                  <div class="divider"></div>
-                  <button class="btn">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                      <path d="M19 9l-7 7-7-7" stroke-width="2" />
-                    </svg>
-                  </button>
-                  <span class="temperature-air" id="temperature-${roomName}">${
-    acStates[roomKey].roomTemperatures
-  }°C</span>
-                  <button class="btn-up">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                      <path d="M5 15l7-7 7 7" stroke-width="2" />
                     </svg>
                   </button>
                 </div>
@@ -2823,10 +2725,6 @@ function sanitizeRoomName(room) {
   return room.toLowerCase().replace(/\s+/g, "-");
 }
 let latestValues = {};
-let roomTemperatures = {
-  "Phòng họp lầu 3": 20,
-  "Phòng họp lầu 4": 20,
-};
 const eraWidget = new EraWidget();
 // Lấy các phần tử HTML dựa trên ID, liên kết với giao diện người dùng
 const temp = document.getElementById("temperature-eRa");
@@ -2998,15 +2896,6 @@ eraWidget.init({
     //   if (powerIndex2) powerIndex2.textContent = powerValue2;
     // }
 
-    if (configAirConditioner && values[configAirConditioner.id]) {
-      const airValue1 = values[configAirConditioner.id].value;
-      roomTemperatures["Phòng họp lầu 3"] = parseFloat(airValue1);
-    }
-    if (configAirConditioner2 && values[configAirConditioner2.id]) {
-      const airValue2 = values[configAirConditioner2.id].value;
-      roomTemperatures["Phòng họp lầu 4"] = parseFloat(airValue2);
-    }
-
     if (configPeopleDetection1 && values[configPeopleDetection1.id]) {
       PeopleDetectionSystem.updateStatus(
         "Phòng họp lầu 3",
@@ -3056,14 +2945,12 @@ function updateACStatus(container, room) {
   const statusDot = container.querySelector(".status-air-dot");
   const statusText = container.querySelector(".status-air span");
   const powerButton = container.querySelector(".controls .btn");
-  const tempDisplay = container.querySelector(".temperature-air");
 
   // Debug: Log UI elements
   console.log(`[DEBUG] UI Elements for ${room}:`, {
     statusDot: !!statusDot,
     statusText: !!statusText,
     powerButton: !!powerButton,
-    tempDisplay: !!tempDisplay,
   });
 
   // Create status monitor function
@@ -3099,16 +2986,6 @@ function updateACStatus(container, room) {
         } else {
           powerButton.classList.remove("active");
           powerButton.style.backgroundColor = "#6c757d";
-        }
-      }
-
-      // Update temperature display
-      if (tempDisplay) {
-        if (isActuallyRunning) {
-          const currentTemp = acStates[roomKey]?.roomTemperatures || 25;
-          tempDisplay.textContent = `${currentTemp}°C`;
-        } else {
-          tempDisplay.textContent = "OFF";
         }
       }
 
@@ -3148,21 +3025,6 @@ function updateACStatus(container, room) {
   observer.observe(container.parentNode, { childList: true });
 
   return monitoringInterval;
-}
-// Helper function to get room temperature
-function getRoomTemperature(roomKey) {
-  try {
-    // Replace this with your actual temperature reading logic
-    // This could be from sensors, era data, or other sources
-    const eraSuffix = roomEraMap[roomKey];
-    // Example: return eraWidget.getTemperature(eraSuffix);
-
-    // For now, return mock temperature
-    return Math.floor(Math.random() * 5) + 23; // 23-27°C
-  } catch (error) {
-    console.error(`Failed to get temperature for ${roomKey}:`, error);
-    return null;
-  }
 }
 function capitalizeFirst(str) {
   return str.replace(/\b\w/g, (char) => char.toUpperCase());
